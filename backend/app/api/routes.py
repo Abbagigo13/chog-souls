@@ -1,6 +1,7 @@
 # backend/app/api/routes.py
 import os
 import random
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -74,10 +75,12 @@ def mark_faded_memories(soul: Soul) -> None:
         memory.faded = memory.importance < 10
 
 
-# --- In-Memory Database ---
+# --- The demo Soul (a fresh copy every time; nothing is stored on the server) ---
 DEMO_SOUL_ID = "demo"
-db_souls = {
-    DEMO_SOUL_ID: Soul(
+
+
+def make_demo_soul() -> Soul:
+    return Soul(
         id=DEMO_SOUL_ID,
         name="Giga",
         archetype="The Loyal Trickster",
@@ -105,15 +108,27 @@ db_souls = {
         is_demo=True,
         image_url="/chogs/demo.svg",
     )
-}
+
+
+def resolve_soul(provided: Optional[Soul]) -> Soul:
+    """
+    The browser sends the Soul it is playing with. If an old client sends
+    nothing, fall back to a fresh demo Soul instead of shared server state.
+    """
+    return provided if provided is not None else make_demo_soul()
 
 
 # --- Request Schemas ---
+class SoulOnlyRequest(BaseModel):
+    soul: Optional[Soul] = None
+
 class ChatRequest(BaseModel):
     message: str
+    soul: Optional[Soul] = None
 
 class ChoiceRequest(BaseModel):
     action: str
+    soul: Optional[Soul] = None
 
 class ImportChogRequest(BaseModel):
     address: str
@@ -131,20 +146,19 @@ async def health_check():
 
 @router.get("/soul/demo")
 async def get_demo_soul():
-    soul = db_souls[DEMO_SOUL_ID]
+    soul = make_demo_soul()
     mark_faded_memories(soul)
     return soul
 
 
 @router.post("/soul/daily")
-async def daily_check():
-    soul = db_souls[DEMO_SOUL_ID]
+async def daily_check(request: Optional[SoulOnlyRequest] = None):
+    soul = resolve_soul(request.soul if request else None)
 
     visit_result = RetentionEngine.check_daily_visit(soul)
     level_info = check_level_up(soul)
     newly_unlocked = RetentionEngine.check_achievements(soul)
 
-    db_souls[DEMO_SOUL_ID] = soul
     mark_faded_memories(soul)
 
     return {
@@ -155,9 +169,7 @@ async def daily_check():
     }
 
 
-@router.get("/soul/quest/today")
-async def get_today_quest():
-    soul = db_souls[DEMO_SOUL_ID]
+def build_today_quest(soul: Soul) -> dict:
     today = datetime.now()
     today_str = today.date().isoformat()
     weekday = today.weekday()
@@ -173,9 +185,18 @@ async def get_today_quest():
     }
 
 
-@router.get("/soul/achievements")
-async def get_achievements():
-    soul = db_souls[DEMO_SOUL_ID]
+@router.get("/soul/quest/today")
+async def get_today_quest():
+    return build_today_quest(make_demo_soul())
+
+
+@router.post("/soul/quest/today")
+async def post_today_quest(request: Optional[SoulOnlyRequest] = None):
+    soul = resolve_soul(request.soul if request else None)
+    return build_today_quest(soul)
+
+
+def build_achievements(soul: Soul) -> dict:
     statuses = RetentionEngine.get_all_achievements_status(soul)
 
     unlocked_count = sum(1 for s in statuses if s["unlocked"])
@@ -188,9 +209,20 @@ async def get_achievements():
     }
 
 
+@router.get("/soul/achievements")
+async def get_achievements():
+    return build_achievements(make_demo_soul())
+
+
+@router.post("/soul/achievements")
+async def post_achievements(request: Optional[SoulOnlyRequest] = None):
+    soul = resolve_soul(request.soul if request else None)
+    return build_achievements(soul)
+
+
 @router.post("/soul/chat")
 async def chat_with_soul(request: ChatRequest):
-    soul = db_souls[DEMO_SOUL_ID]
+    soul = resolve_soul(request.soul)
 
     ai_response = SoulEngine.chat(soul, request.message)
 
@@ -229,7 +261,7 @@ async def chat_with_soul(request: ChatRequest):
         level_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Reached Level {level_info['new_level']}",
-            text=f"Giga evolved into Level {level_info['new_level']} through conversation.",
+            text=f"{soul.name} evolved into Level {level_info['new_level']} through conversation.",
             importance=90,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -242,7 +274,7 @@ async def chat_with_soul(request: ChatRequest):
         evolution_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Transformed: {evolution_info['new_archetype']}",
-            text=f"Giga's nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
+            text=f"{soul.name}'s nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
             importance=95,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -252,7 +284,6 @@ async def chat_with_soul(request: ChatRequest):
 
     newly_unlocked = RetentionEngine.check_achievements(soul)
 
-    db_souls[DEMO_SOUL_ID] = soul
     mark_faded_memories(soul)
 
     return {
@@ -267,7 +298,7 @@ async def chat_with_soul(request: ChatRequest):
 
 @router.post("/soul/choice")
 async def make_choice(request: ChoiceRequest):
-    soul = db_souls[DEMO_SOUL_ID]
+    soul = resolve_soul(request.soul)
     action = request.action.lower()
 
     today_str = datetime.now().date().isoformat()
@@ -295,7 +326,7 @@ async def make_choice(request: ChoiceRequest):
         soul.mood = quest_result["mood_change"]
 
     importance = MemoryEngine.score_importance(
-        memory_text=quest_result.get("memory_text", f"Giga chose to {action}."),
+        memory_text=quest_result.get("memory_text", f"{soul.name} chose to {action}."),
         memory_title=quest_result.get("memory_title", "A choice was made"),
         stat_changes=stat_changes_applied,
         base_importance=quest_result.get("memory_importance", 60),
@@ -305,7 +336,7 @@ async def make_choice(request: ChoiceRequest):
     new_memory = Memory(
         id=str(uuid.uuid4()),
         title=quest_result.get("memory_title", "A choice was made"),
-        text=quest_result.get("memory_text", f"Giga chose to {action}."),
+        text=quest_result.get("memory_text", f"{soul.name} chose to {action}."),
         importance=importance,
         timestamp=datetime.now().isoformat(),
         faded=False,
@@ -320,7 +351,7 @@ async def make_choice(request: ChoiceRequest):
         level_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Reached Level {level_info['new_level']}",
-            text=f"Giga grew stronger through making hard choices.",
+            text=f"{soul.name} grew stronger through making hard choices.",
             importance=90,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -333,7 +364,7 @@ async def make_choice(request: ChoiceRequest):
         evolution_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Transformed: {evolution_info['new_archetype']}",
-            text=f"Giga's nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
+            text=f"{soul.name}'s nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
             importance=95,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -347,7 +378,6 @@ async def make_choice(request: ChoiceRequest):
 
     newly_unlocked = RetentionEngine.check_achievements(soul)
 
-    db_souls[DEMO_SOUL_ID] = soul
     mark_faded_memories(soul)
 
     return {
@@ -365,12 +395,7 @@ async def make_choice(request: ChoiceRequest):
 
 # --- Arena: Random Rival + Taunt ---
 
-@router.get("/arena/rival/random")
-async def get_random_rival():
-    """
-    Returns a random rival with their pre-battle taunt.
-    """
-    soul = db_souls[DEMO_SOUL_ID]
+async def build_random_rival(soul: Soul) -> dict:
     rival = random.choice(RIVALS)
     taunt = await RivalEngine.generate_taunt(soul, rival)
 
@@ -388,11 +413,24 @@ async def get_random_rival():
     }
 
 
+@router.get("/arena/rival/random")
+async def get_random_rival():
+    """Returns a random rival with their pre-battle taunt (demo Soul)."""
+    return await build_random_rival(make_demo_soul())
+
+
+@router.post("/arena/rival/random")
+async def post_random_rival(request: Optional[SoulOnlyRequest] = None):
+    """Same, but the taunt is written for the Soul the browser sends."""
+    soul = resolve_soul(request.soul if request else None)
+    return await build_random_rival(soul)
+
+
 # --- Arena: Battle with the specified rival ---
 
 @router.post("/arena/battle/{rival_id}")
-async def arena_battle(rival_id: str):
-    soul = db_souls[DEMO_SOUL_ID]
+async def arena_battle(rival_id: str, request: Optional[SoulOnlyRequest] = None):
+    soul = resolve_soul(request.soul if request else None)
 
     # Find the rival by id
     rival = next((r for r in RIVALS if r["id"] == rival_id), None)
@@ -442,7 +480,7 @@ async def arena_battle(rival_id: str):
         level_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Reached Level {level_info['new_level']}",
-            text=f"Giga ascended in the Arena through victory and combat.",
+            text=f"{soul.name} ascended in the Arena through victory and combat.",
             importance=90,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -455,7 +493,7 @@ async def arena_battle(rival_id: str):
         evolution_memory = Memory(
             id=str(uuid.uuid4()),
             title=f"Transformed: {evolution_info['new_archetype']}",
-            text=f"Giga's nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
+            text=f"{soul.name}'s nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
             importance=95,
             timestamp=datetime.now().isoformat(),
             faded=False,
@@ -484,7 +522,6 @@ async def arena_battle(rival_id: str):
 
     newly_unlocked = RetentionEngine.check_achievements(soul)
 
-    db_souls[DEMO_SOUL_ID] = soul
     mark_faded_memories(soul)
 
     return {
