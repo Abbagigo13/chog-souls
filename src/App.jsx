@@ -18,10 +18,11 @@ import { useSoul } from "./hooks/useSoul";
 import { connectWallet } from "./lib/wallet";
 import { getChogStats } from "./lib/chogContract";
 import { decodeChogTraits } from "./lib/traitDecoder";
-import { apiChat, apiChoice, apiBattle, apiDailyCheck } from "./lib/api";
+import { apiChat, apiChoice, apiDailyCheck } from "./lib/api";
 import { playSound, toggleMute, isMuted } from "./lib/sound";
 
-// Extracts the image URL from Chog metadata (handles IPFS + HTTP)
+// Extracts the image URL from Chog metadata (handles IPFS + HTTP).
+// Avatar.jsx tries other IPFS gateways if this one fails to load.
 function extractImageUrl(metadata) {
   if (!metadata || !metadata.image) return null;
   const img = metadata.image;
@@ -69,14 +70,15 @@ export default function App() {
     return () => clearTimeout(t);
   }, [evolutionEvent]);
 
-  // --- Daily visit check (runs once per session for demo Soul) ---
-  const dailyCheckRan = useRef(false);
+  // --- Daily visit check: once per Soul per session (works for ANY Soul) ---
+  const dailyCheckedFor = useRef(null);
+  const activeSoulId = soul ? soul.id : null;
   useEffect(() => {
-    if (!soul) return;
-    if (soul.id !== "demo") return;
-    if (dailyCheckRan.current) return;
+    if (!activeSoulId) return;
+    if (dailyCheckedFor.current === activeSoulId) return;
 
-    dailyCheckRan.current = true;
+    dailyCheckedFor.current = activeSoulId;
+    const checkedId = activeSoulId;
     let cancelled = false;
 
     async function checkDaily() {
@@ -84,7 +86,8 @@ export default function App() {
         const data = await apiDailyCheck();
         if (cancelled) return;
 
-        if (data.soul) updateSoul(data.soul);
+        // Only apply the result if it belongs to the Soul we checked
+        if (data.soul && data.soul.id === checkedId) updateSoul(data.soul);
 
         if (data.visit?.rewarded) {
           setToast(`🔥 Day ${data.visit.streak} streak · +${data.visit.xp} XP`);
@@ -105,7 +108,7 @@ export default function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [soul]);
+  }, [activeSoulId]);
 
   // --- Onboarding trigger ---
   useEffect(() => {
@@ -168,14 +171,15 @@ export default function App() {
         xp: 0,
         xp_to_next_level: 100,
         imageUrl: imageUrl,
-        image_url: imageUrl,
+        image_url: imageUrl || "",
         tokenId: result.tokenId,
+        token_id: result.tokenId,
         is_demo: false,
         memories: [
           {
             id: `awaken-${Date.now()}`,
             title: "Soul awakened",
-            text: `${decoded.name} was imported from Chog NFT #${result.tokenId}.`,
+            text: `${decoded.name} was imported from a real Chog NFT (token ${result.tokenId}).`,
             importance: 88,
             timestamp: new Date().toISOString(),
           },
@@ -183,7 +187,7 @@ export default function App() {
       };
 
       updateSoul(newSoul);
-      setToast(`Chog #${result.tokenId} imported`);
+      setToast(`${decoded.name} imported`);
       setPage("dashboard");
       return newSoul;
     } catch (error) {
@@ -206,9 +210,11 @@ export default function App() {
         xp: 0,
         xp_to_next_level: 100,
         imageUrl: chog.imageUrl,
-        image_url: chog.imageUrl,
+        image_url: chog.imageUrl || "",
         tokenId: chog.tokenId,
-        is_demo: false,
+        token_id: chog.tokenId || 0,
+        // Demo Chogs are NOT real NFTs: Unranked + 50% XP
+        is_demo: true,
         memories: [
           {
             id: `awaken-${Date.now()}`,
@@ -257,7 +263,7 @@ export default function App() {
       return data.reply;
     } catch (error) {
       console.error("Chat error:", error);
-      setToast("Giga could not respond.");
+      setToast(`${soul.name} could not respond.`);
       return "I'm having trouble connecting...";
     } finally {
       setIsAiThinking(false);
@@ -294,33 +300,6 @@ export default function App() {
     }
   }
 
-  async function handleBattle() {
-    if (!soul) return null;
-    try {
-      const data = await apiBattle();
-      if (data.soul) updateSoul(data.soul);
-      if (data.leveled_up) {
-        setLevelUpEvent({ from: soul.level, to: data.new_level });
-      }
-      if (data.evolution_info?.evolved) {
-        setEvolutionEvent({
-          from: data.evolution_info.old_archetype,
-          to: data.evolution_info.new_archetype,
-        });
-      }
-      if (data.achievements_unlocked?.length > 0) {
-        setTimeout(() => {
-          setToast(`🏆 Achievement: ${data.achievements_unlocked.length} unlocked!`);
-        }, 500);
-      }
-      return data;
-    } catch (error) {
-      console.error("Battle error:", error);
-      setToast("Arena failed to load.");
-      return null;
-    }
-  }
-
   const handleViewProfile = (rival) => {
     setSelectedRival(rival);
     setPage("profile");
@@ -352,7 +331,7 @@ export default function App() {
     if (page === "talk")
       return <Talk {...shared} onChat={handleChat} isThinking={isAiThinking} />;
     if (page === "quest") return <Quest {...shared} onChoice={handleChoice} />;
-        if (page === "arena")
+    if (page === "arena")
       return (
         <Arena
           {...shared}
@@ -435,7 +414,7 @@ export default function App() {
           <div className="level-up-inner">
             <p className="eyebrow">SOUL EVOLVED</p>
             <h1>LEVEL {levelUpEvent.to}</h1>
-            <p>Giga has grown stronger.</p>
+            <p>{soul.name} has grown stronger.</p>
           </div>
         </div>
       )}

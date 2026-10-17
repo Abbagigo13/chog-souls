@@ -1,13 +1,49 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://127.0.0.1:8000/api";
+// src/lib/api.js
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 
+// Same key that useSoul.js saves the Soul under
+const SOUL_STORAGE_KEY = "chog_soul_data";
+
+// The Soul the browser is currently playing with
+function readCurrentSoul() {
+  try {
+    const raw = localStorage.getItem(SOUL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// The backend only knows snake_case fields. Put back the camelCase ones
+// the frontend pages use (imageUrl, tokenId) so they are never lost.
+function normalizeSoul(returned, previous) {
+  if (!returned) return returned;
+  const prev = previous || {};
+  const imageUrl = returned.image_url || prev.imageUrl || undefined;
+  const tokenId = prev.tokenId ?? (returned.token_id || undefined);
+  return {
+    ...returned,
+    imageUrl,
+    image_url: returned.image_url || imageUrl || "",
+    tokenId,
+  };
+}
+
+function withNormalizedSoul(data, previous) {
+  if (data && data.soul) data.soul = normalizeSoul(data.soul, previous);
+  return data;
+}
+
+async function postJson(path, body) {
+  return fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
 
 export async function apiHealth() {
-
-  const response = await fetch(
-    `${API_URL}/health`
-  );
+  const response = await fetch(`${API_URL}/health`);
 
   if (!response.ok) {
     throw new Error("Backend unavailable");
@@ -16,73 +52,42 @@ export async function apiHealth() {
   return response.json();
 }
 
-
 export async function getDemoSoul() {
-
-  const response = await fetch(
-    `${API_URL}/soul/demo`
-  );
+  const response = await fetch(`${API_URL}/soul/demo`);
 
   if (!response.ok) {
     throw new Error("Unable to load Soul");
   }
 
-  return response.json();
+  const soul = await response.json();
+  return normalizeSoul(soul, null);
 }
 
-
 export async function apiChat(message) {
-
-  const response = await fetch(
-    `${API_URL}/soul/chat`,
-    {
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-        message
-      })
-    }
-  );
+  const previous = readCurrentSoul();
+  const response = await postJson("/soul/chat", { message, soul: previous });
 
   if (!response.ok) {
     throw new Error("Chat API failed");
   }
 
-  return response.json();
+  return withNormalizedSoul(await response.json(), previous);
 }
 
-
 export async function apiChoice(action) {
-
-  const response = await fetch(
-    `${API_URL}/soul/choice`,
-    {
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-        action
-      })
-    }
-  );
+  const previous = readCurrentSoul();
+  const response = await postJson("/soul/choice", { action, soul: previous });
 
   if (!response.ok) {
     throw new Error("Choice API failed");
   }
 
-  return response.json();
+  return withNormalizedSoul(await response.json(), previous);
 }
 
-
 export async function apiRandomRival() {
-  const response = await fetch(`${API_URL}/arena/rival/random`);
+  const previous = readCurrentSoul();
+  const response = await postJson("/arena/rival/random", { soul: previous });
   if (!response.ok) {
     throw new Error("Could not load random rival");
   }
@@ -90,32 +95,28 @@ export async function apiRandomRival() {
 }
 
 export async function apiBattle(rivalId) {
-  const response = await fetch(`${API_URL}/arena/battle/${rivalId}`, {
-    method: "POST",
-  });
+  const previous = readCurrentSoul();
+  const response = await postJson(`/arena/battle/${rivalId}`, { soul: previous });
   if (!response.ok) {
     throw new Error("Battle API failed");
   }
-  return response.json();
+  return withNormalizedSoul(await response.json(), previous);
 }
 
 export async function apiDailyCheck() {
-  const response = await fetch(
-    `${API_URL}/soul/daily`,
-    {
-      method: "POST",
-    }
-  );
+  const previous = readCurrentSoul();
+  const response = await postJson("/soul/daily", { soul: previous });
 
   if (!response.ok) {
     throw new Error("Daily check failed");
   }
 
-  return response.json();
+  return withNormalizedSoul(await response.json(), previous);
 }
 
 export async function apiGetTodayQuest() {
-  const response = await fetch(`${API_URL}/soul/quest/today`);
+  const previous = readCurrentSoul();
+  const response = await postJson("/soul/quest/today", { soul: previous });
   if (!response.ok) {
     throw new Error("Could not load today's quest");
   }
@@ -123,11 +124,7 @@ export async function apiGetTodayQuest() {
 }
 
 export async function apiChogBalance(address) {
-  const response = await fetch(`${API_URL}/chog/token-balance`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address }),
-  });
+  const response = await postJson("/chog/token-balance", { address });
   if (!response.ok) {
     throw new Error("Could not read $CHOG balance");
   }
@@ -143,7 +140,8 @@ export async function apiRandomDemoChog() {
 }
 
 export async function apiAchievements() {
-  const response = await fetch(`${API_URL}/soul/achievements`);
+  const previous = readCurrentSoul();
+  const response = await postJson("/soul/achievements", { soul: previous });
   if (!response.ok) {
     throw new Error("Could not load achievements");
   }
