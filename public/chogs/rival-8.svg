@@ -1,0 +1,21 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="berkGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ff8a5c"/>
+      <stop offset="70%" stop-color="#c03818"/>
+      <stop offset="100%" stop-color="#4a1000"/>
+    </radialGradient>
+    <filter id="berkGlow">
+      <feGaussianBlur stdDeviation="5"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M55 50 L65 15 L85 45 M115 45 L135 15 L145 50" fill="url(#berkGrad)" filter="url(#berkGlow)"/>
+  <circle cx="100" cy="110" r="70" fill="url(#berkGrad)" stroke="#ffc8a8" stroke-width="2.5" filter="url(#berkGlow)"/>
+  <circle cx="78" cy="100" r="13" fill="#2a0000"/>
+  <circle cx="122" cy="100" r="13" fill="#2a0000"/>
+  <circle cx="80" cy="98" r="4" fill="#ffc8a8"/>
+  <circle cx="124" cy="98" r="4" fill="#ffc8a8"/>
+  <circle cx="100" cy="132" r="4" fill="#2a0000"/>
+  <path d="M80 150 L100 145 L120 150 L100 156 Z" fill="#2a0000"/>
+</svg>

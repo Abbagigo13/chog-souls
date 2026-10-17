@@ -1,0 +1,21 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="novaGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#7a9dd6"/>
+      <stop offset="70%" stop-color="#3d5a8c"/>
+      <stop offset="100%" stop-color="#1a2847"/>
+    </radialGradient>
+    <filter id="novaGlow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M60 55 L70 25 L85 50 M115 50 L130 25 L140 55" fill="url(#novaGrad)" filter="url(#novaGlow)"/>
+  <circle cx="100" cy="110" r="70" fill="url(#novaGrad)" stroke="#a8c4e8" stroke-width="2.5" filter="url(#novaGlow)"/>
+  <circle cx="78" cy="100" r="12" fill="#0a1628"/>
+  <circle cx="122" cy="100" r="12" fill="#0a1628"/>
+  <circle cx="80" cy="98" r="4" fill="#a8c4e8"/>
+  <circle cx="124" cy="98" r="4" fill="#a8c4e8"/>
+  <circle cx="100" cy="130" r="3.5" fill="#0a1628"/>
+  <path d="M85 145 Q100 155 115 145" stroke="#0a1628" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>

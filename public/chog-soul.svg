@@ -1,0 +1,18 @@
+<svg width="600" height="600" viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<radialGradient id="g" cx="50%" cy="30%" r="75%">
+<stop offset="0%" stop-color="#C7B7FF"/>
+<stop offset="45%" stop-color="#836EF9"/>
+<stop offset="100%" stop-color="#3B1D78"/>
+</radialGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="22"/></filter>
+</defs>
+<circle cx="300" cy="300" r="235" fill="#836EF9" opacity=".14" filter="url(#glow)"/>
+<path d="M168 220C127 155 146 103 204 134C240 154 264 181 274 210C282 188 318 188 326 210C336 181 360 154 396 134C454 103 473 155 432 220C462 250 478 291 478 336C478 447 401 512 300 512C199 512 122 447 122 336C122 291 138 250 168 220Z" fill="url(#g)" stroke="#E3DCFF" stroke-width="5"/>
+<ellipse cx="227" cy="309" rx="39" ry="50" fill="#0A0710"/>
+<ellipse cx="373" cy="309" rx="39" ry="50" fill="#0A0710"/>
+<circle cx="240" cy="293" r="10" fill="#FFFFFF"/>
+<circle cx="386" cy="293" r="10" fill="#FFFFFF"/>
+<circle cx="300" cy="359" r="10" fill="#0A0710"/>
+<path d="M270 392C287 408 313 408 330 392" stroke="#0A0710" stroke-width="12" stroke-linecap="round"/>
+</svg>

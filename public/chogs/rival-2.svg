@@ -1,0 +1,21 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="oracleGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#a8d8f0"/>
+      <stop offset="70%" stop-color="#4a7ba8"/>
+      <stop offset="100%" stop-color="#1a3a55"/>
+    </radialGradient>
+    <filter id="oracleGlow">
+      <feGaussianBlur stdDeviation="4"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M60 55 L70 25 L85 50 M115 50 L130 25 L140 55" fill="url(#oracleGrad)" filter="url(#oracleGlow)"/>
+  <circle cx="100" cy="110" r="70" fill="url(#oracleGrad)" stroke="#d8f0ff" stroke-width="2.5" filter="url(#oracleGlow)"/>
+  <path d="M70 100 Q78 92 86 100 Q78 108 70 100 Z" fill="#0a2540"/>
+  <path d="M114 100 Q122 92 130 100 Q122 108 114 100 Z" fill="#0a2540"/>
+  <circle cx="78" cy="100" r="3" fill="#d8f0ff"/>
+  <circle cx="122" cy="100" r="3" fill="#d8f0ff"/>
+  <circle cx="100" cy="132" r="2.5" fill="#0a2540"/>
+  <path d="M90 148 Q100 152 110 148" stroke="#0a2540" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>

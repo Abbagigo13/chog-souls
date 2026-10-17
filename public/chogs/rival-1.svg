@@ -1,0 +1,21 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="shadowGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#5c2a5c"/>
+      <stop offset="70%" stop-color="#2e0e2e"/>
+      <stop offset="100%" stop-color="#0d030d"/>
+    </radialGradient>
+    <filter id="shadowGlow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path d="M60 55 L70 20 L85 50 M115 50 L130 20 L140 55" fill="url(#shadowGrad)" filter="url(#shadowGlow)"/>
+  <circle cx="100" cy="110" r="70" fill="url(#shadowGrad)" stroke="#ff4d9e" stroke-width="2.5" filter="url(#shadowGlow)"/>
+  <circle cx="78" cy="100" r="14" fill="#ff2d5e"/>
+  <circle cx="122" cy="100" r="14" fill="#ff2d5e"/>
+  <circle cx="78" cy="100" r="5" fill="#fff"/>
+  <circle cx="122" cy="100" r="5" fill="#fff"/>
+  <circle cx="100" cy="132" r="3" fill="#ff2d5e"/>
+  <path d="M82 148 L100 142 L118 148" stroke="#ff2d5e" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
