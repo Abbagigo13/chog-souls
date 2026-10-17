@@ -2,17 +2,19 @@
 import asyncio
 import base64
 import json
-from typing import Optional, Dict, Any, List
+import time
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import unquote
 
 import httpx
 
-# --- Monad Mainnet ---
-MONAD_RPC_URLS = [
-    "https://rpc.monad.xyz",
-    "https://rpc1.monad.xyz",
-    "https://monad-mainnet-rpc.publicnode.com",
-    "https://monad.drpc.org",
+# --- Monad Mainnet public RPCs: (url, max calls allowed in one batch request) ---
+MONAD_RPCS: List[Tuple[str, int]] = [
+    ("https://rpc.monad.xyz", 100),
+    ("https://rpc1.monad.xyz", 100),
+    ("https://rpc2.monad.xyz", 10),
+    ("https://rpc3.monad.xyz", 10),
 ]
 
 CHOG_CONTRACT = "0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763"
@@ -25,24 +27,60 @@ IPFS_GATEWAYS = [
     "https://nftstorage.link/ipfs/",
 ]
 
-# Used only if the contract has no totalSupply()
-MAX_TOKEN_ID_FALLBACK = 10000
-# Hard ceiling for the slow scan
-MAX_TOKEN_ID_CEILING = 20000
-# How many ownerOf calls run at the same time during the slow scan
-SCAN_CONCURRENCY = 20
+# How many calls we put into ONE batch request (public RPCs allow up to 100)
+BATCH_CHUNK = 50
+# Small pause between batch requests so we stay under the RPC rate limit
+BATCH_PAUSE_SECONDS = 0.1
+# After an RPC fails or rate-limits us, leave it alone for this long
+RPC_COOLDOWN_SECONDS = 15
+# How long the "who owns which token" table stays fresh
+OWNER_MAP_TTL_SECONDS = 300
+# How long a finished import stays cached on disk
+STATS_TTL_SECONDS = 24 * 3600
+# If the contract has no totalSupply(), scan up to this token ID
+MAX_TOKEN_ID_FALLBACK = 2500
+MAX_TOKEN_ID_CEILING = 5000
 # If one token's metadata can't be loaded, try this many of the holder's tokens
 MAX_METADATA_TOKEN_TRIES = 5
 
-# Remember results so repeated imports are instant
-_STATS_CACHE: Dict[str, Dict[str, Any]] = {}
+# --- Caches -------------------------------------------------------------
+_CACHE_FILE = Path(__file__).resolve().parents[2] / "chog_cache.json"
+
+
+def _load_disk_cache() -> Dict[str, Any]:
+    try:
+        if _CACHE_FILE.exists():
+            return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[chog] could not read cache file: {e}")
+    return {}
+
+
+def _save_disk_cache() -> None:
+    try:
+        _CACHE_FILE.write_text(
+            json.dumps(_STATS_CACHE, indent=2), encoding="utf-8"
+        )
+    except Exception as e:
+        print(f"[chog] could not write cache file: {e}")
+
+
+# address (lowercase) -> {"ts": unix time, "stats": {...}}
+_STATS_CACHE: Dict[str, Any] = _load_disk_cache()
 _METADATA_CACHE: Dict[str, Dict[str, Any]] = {}
+
+_RPC_COOLDOWN_UNTIL: Dict[str, float] = {}
+
+_OWNER_MAP: Dict[int, str] = {}
+_OWNER_MAP_BUILT_AT: float = 0.0
+_OWNER_MAP_LOCK: Optional[asyncio.Lock] = None
 
 
 class ChogReader:
     """
     Server-side reader for the Chog Genesis NFT contract on Monad Mainnet.
-    Uses raw JSON-RPC calls to avoid CORS issues.
+    Uses raw JSON-RPC calls (sent in batches) to avoid CORS issues and to
+    stay under the public RPC rate limits.
     """
 
     # --- ABI method selectors (keccak-256 first 4 bytes) ---
@@ -66,65 +104,141 @@ class ChogReader:
         return hex(value)[2:].rjust(64, "0")
 
     @staticmethod
+    def _is_revert(error: Any) -> bool:
+        """True if a JSON-RPC error means 'the contract said no' (not an outage)."""
+        if not isinstance(error, dict):
+            return False
+        message = str(error.get("message", "")).lower()
+        return (
+            error.get("code") == 3
+            or "revert" in message
+            or "execution" in message
+        )
+
+    # ------------------------------------------------------------------
+    # Low-level: send many calls as JSON-RPC batches
+    # ------------------------------------------------------------------
+    @staticmethod
+    async def _rpc_batch(
+        requests: List[Tuple[str, List]],
+        client: httpx.AsyncClient,
+    ) -> List[Optional[Dict[str, Any]]]:
+        """
+        Send many JSON-RPC calls in as few HTTP requests as possible.
+
+        Returns one entry per request, in the same order:
+          - {"result": ...}  the call worked
+          - {"error": ...}   the contract reverted (a real answer, e.g. token
+                             does not exist)
+          - None             we could not get an answer from any RPC
+        An RPC that fails or rate-limits us is skipped for a short cooldown,
+        and its unfinished calls move on to the next RPC.
+        """
+        results: List[Optional[Dict[str, Any]]] = [None] * len(requests)
+        pending = list(range(len(requests)))
+        now = time.monotonic()
+
+        rpcs = [
+            rpc for rpc in MONAD_RPCS
+            if now >= _RPC_COOLDOWN_UNTIL.get(rpc[0], 0.0)
+        ] or list(MONAD_RPCS)  # everything cooling down: try anyway
+
+        for url, batch_limit in rpcs:
+            if not pending:
+                break
+
+            chunk_size = max(1, min(BATCH_CHUNK, batch_limit))
+            still_pending: List[int] = []
+            broken = False
+
+            for start in range(0, len(pending), chunk_size):
+                chunk = pending[start:start + chunk_size]
+
+                if broken:
+                    still_pending.extend(chunk)
+                    continue
+
+                body = [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": i,
+                        "method": requests[i][0],
+                        "params": requests[i][1],
+                    }
+                    for i in chunk
+                ]
+
+                try:
+                    response = await client.post(url, json=body)
+                    if response.status_code != 200:
+                        raise RuntimeError(f"HTTP {response.status_code}")
+
+                    data = response.json()
+                    if not isinstance(data, list):
+                        raise RuntimeError("batch not supported / error reply")
+
+                    by_id = {
+                        item.get("id"): item
+                        for item in data
+                        if isinstance(item, dict)
+                    }
+
+                    for i in chunk:
+                        item = by_id.get(i)
+                        if item is None:
+                            still_pending.append(i)
+                        elif "result" in item:
+                            results[i] = {"result": item["result"]}
+                        elif ChogReader._is_revert(item.get("error")):
+                            results[i] = {"error": item["error"]}
+                        else:
+                            still_pending.append(i)  # e.g. item rate-limited
+
+                    await asyncio.sleep(BATCH_PAUSE_SECONDS)
+
+                except Exception as e:
+                    print(f"[chog] RPC {url} failed: {type(e).__name__} {e}")
+                    _RPC_COOLDOWN_UNTIL[url] = (
+                        time.monotonic() + RPC_COOLDOWN_SECONDS
+                    )
+                    broken = True
+                    still_pending.extend(chunk)
+
+            pending = still_pending
+
+        return results
+
+    @staticmethod
     async def _rpc_call(
         method: str,
         params: List,
         client: Optional[httpx.AsyncClient] = None,
     ) -> Optional[str]:
-        """
-        Call a JSON-RPC method, trying each RPC endpoint in order.
-        Returns the hex result, or None on failure / contract revert.
-        A revert (e.g. token does not exist) is a real answer from the
-        contract, so we do NOT retry it on the other RPCs.
-        """
+        """One call. Returns the hex result, or None on failure / revert."""
         if client is None:
-            async with httpx.AsyncClient(timeout=20.0) as own_client:
+            async with httpx.AsyncClient(timeout=10.0) as own_client:
                 return await ChogReader._rpc_call(method, params, own_client)
 
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params,
-        }
-
-        for rpc_url in MONAD_RPC_URLS:
-            try:
-                response = await client.post(rpc_url, json=payload)
-                if response.status_code != 200:
-                    continue  # rate limit or outage: try next RPC
-                data = response.json()
-                if "result" in data:
-                    return data["result"]
-
-                err = data.get("error") or {}
-                msg = str(err.get("message", "")).lower()
-                if "revert" in msg or "execution" in msg or err.get("code") == 3:
-                    return None  # contract said no: don't retry elsewhere
-                # any other error: try the next RPC
-            except Exception as e:
-                print(f"[chog] RPC {rpc_url} failed: {e}")
-                continue
-
+        responses = await ChogReader._rpc_batch([(method, params)], client)
+        response = responses[0]
+        if response and "result" in response:
+            return response["result"]
         return None
 
+    # ------------------------------------------------------------------
+    # Simple contract reads
+    # ------------------------------------------------------------------
     @staticmethod
     async def get_balance(
         address: str, client: Optional[httpx.AsyncClient] = None
     ) -> int:
         """Get Chog balance of an address."""
-        encoded = ChogReader._encode_address(address)
-        data = ChogReader.SELECTORS["balanceOf"] + encoded
-
+        data = ChogReader.SELECTORS["balanceOf"] + ChogReader._encode_address(address)
         result = await ChogReader._rpc_call(
-            "eth_call",
-            [{"to": CHOG_CONTRACT, "data": data}, "latest"],
-            client,
+            "eth_call", [{"to": CHOG_CONTRACT, "data": data}, "latest"], client
         )
-
         if not result or result == "0x":
             return 0
-
         return int(result, 16)
 
     @staticmethod
@@ -149,19 +263,12 @@ class ChogReader:
         token_id: int, client: Optional[httpx.AsyncClient] = None
     ) -> Optional[str]:
         """Get the owner of a specific Chog token."""
-        encoded = ChogReader._encode_uint256(token_id)
-        data = ChogReader.SELECTORS["ownerOf"] + encoded
-
+        data = ChogReader.SELECTORS["ownerOf"] + ChogReader._encode_uint256(token_id)
         result = await ChogReader._rpc_call(
-            "eth_call",
-            [{"to": CHOG_CONTRACT, "data": data}, "latest"],
-            client,
+            "eth_call", [{"to": CHOG_CONTRACT, "data": data}, "latest"], client
         )
-
         if not result or result == "0x" or len(result) < 42:
             return None
-
-        # Result is a 32-byte padded address; take the last 40 hex chars
         return "0x" + result[-40:]
 
     @staticmethod
@@ -169,25 +276,18 @@ class ChogReader:
         token_id: int, client: Optional[httpx.AsyncClient] = None
     ) -> Optional[str]:
         """Get the tokenURI for a specific Chog token."""
-        encoded = ChogReader._encode_uint256(token_id)
-        data = ChogReader.SELECTORS["tokenURI"] + encoded
-
+        data = ChogReader.SELECTORS["tokenURI"] + ChogReader._encode_uint256(token_id)
         result = await ChogReader._rpc_call(
-            "eth_call",
-            [{"to": CHOG_CONTRACT, "data": data}, "latest"],
-            client,
+            "eth_call", [{"to": CHOG_CONTRACT, "data": data}, "latest"], client
         )
-
         if not result or result == "0x":
             return None
 
         # Result is ABI-encoded string: offset + length + data
         try:
-            hex_str = result[2:]  # strip 0x
-
+            hex_str = result[2:]
             if len(hex_str) < 128:
                 return None
-
             length = int(hex_str[64:128], 16)
             string_hex = hex_str[128:128 + (length * 2)]
             return bytes.fromhex(string_hex).decode("utf-8")
@@ -195,6 +295,9 @@ class ChogReader:
             print(f"[chog] TokenURI decode error: {e}")
             return None
 
+    # ------------------------------------------------------------------
+    # Metadata (IPFS)
+    # ------------------------------------------------------------------
     @staticmethod
     def _candidate_urls(uri: str) -> List[str]:
         """Turn a tokenURI into a list of URLs to try (keeps the full IPFS path)."""
@@ -208,7 +311,6 @@ class ChogReader:
 
         if uri.startswith("http"):
             urls = [uri]
-            # If it's a gateway link, also try the other gateways
             if "/ipfs/" in uri:
                 path = uri.split("/ipfs/", 1)[1]
                 urls += [gw + path for gw in IPFS_GATEWAYS if not uri.startswith(gw)]
@@ -276,66 +378,150 @@ class ChogReader:
 
         return None
 
+    # ------------------------------------------------------------------
+    # Finding which tokens a wallet owns
+    # ------------------------------------------------------------------
     @staticmethod
-    async def get_owned_token_ids(address: str, max_scan: Optional[int] = None) -> List[int]:
+    async def _get_owner_map(
+        client: httpx.AsyncClient,
+    ) -> Tuple[Dict[int, str], bool]:
+        """
+        Build (or reuse) a table of token ID -> owner for the whole collection.
+        Built with batched calls: ~40 requests instead of ~2,000.
+        Reused for 5 minutes, so every wallet imported after the first is instant.
+        Returns (table, complete). 'complete' is False if some lookups failed.
+        """
+        global _OWNER_MAP, _OWNER_MAP_BUILT_AT, _OWNER_MAP_LOCK
+
+        if _OWNER_MAP_LOCK is None:
+            _OWNER_MAP_LOCK = asyncio.Lock()
+
+        async with _OWNER_MAP_LOCK:
+            age = time.monotonic() - _OWNER_MAP_BUILT_AT
+            if _OWNER_MAP and age < OWNER_MAP_TTL_SECONDS:
+                print(f"[chog] reusing owner table ({len(_OWNER_MAP)} tokens, {int(age)}s old)")
+                return _OWNER_MAP, True
+
+            supply = await ChogReader.get_total_supply(client)
+            upper = (supply + 100) if supply else MAX_TOKEN_ID_FALLBACK
+            upper = min(upper, MAX_TOKEN_ID_CEILING)
+            print(f"[chog] building owner table for token IDs 0..{upper}")
+
+            started = time.monotonic()
+            owners: Dict[int, str] = {}
+            unresolved = list(range(0, upper + 1))
+            owner_selector = ChogReader.SELECTORS["ownerOf"]
+
+            for attempt in range(3):
+                requests = [
+                    (
+                        "eth_call",
+                        [
+                            {
+                                "to": CHOG_CONTRACT,
+                                "data": owner_selector + ChogReader._encode_uint256(t),
+                            },
+                            "latest",
+                        ],
+                    )
+                    for t in unresolved
+                ]
+                responses = await ChogReader._rpc_batch(requests, client)
+
+                next_unresolved: List[int] = []
+                for token_id, response in zip(unresolved, responses):
+                    if response is None:
+                        next_unresolved.append(token_id)
+                    elif "result" in response:
+                        value = response["result"]
+                        if value and len(value) >= 42:
+                            owners[token_id] = ("0x" + value[-40:]).lower()
+                    # a revert means the token does not exist: skip it
+
+                unresolved = next_unresolved
+                if not unresolved:
+                    break
+                print(
+                    f"[chog] {len(unresolved)} lookups unanswered, "
+                    f"retrying (round {attempt + 1} of 3)"
+                )
+                await asyncio.sleep(2.0)
+
+            took = time.monotonic() - started
+            print(
+                f"[chog] owner table: {len(owners)} tokens, "
+                f"{len(unresolved)} unanswered, {took:.1f}s"
+            )
+
+            if not unresolved:
+                _OWNER_MAP = owners
+                _OWNER_MAP_BUILT_AT = time.monotonic()
+                return owners, True
+
+            return owners, False
+
+    @staticmethod
+    async def get_owned_token_ids(address: str) -> List[int]:
         """Find all Chog token IDs owned by an address."""
         target = address.lower()
 
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             balance = await ChogReader.get_balance(address, client)
             print(f"[chog] balanceOf({address}) = {balance}")
             if balance == 0:
                 return []
 
-            # --- Fast path: ERC721Enumerable ---
-            owned: List[int] = []
-            for index in range(min(balance, 20)):
-                data = (
-                    ChogReader.SELECTORS["tokenOfOwnerByIndex"]
-                    + ChogReader._encode_address(address)
-                    + ChogReader._encode_uint256(index)
-                )
-                result = await ChogReader._rpc_call(
+            # --- Fast path: ERC721Enumerable (one batched request) ---
+            count = min(balance, 100)
+            enumerable_requests = [
+                (
                     "eth_call",
-                    [{"to": CHOG_CONTRACT, "data": data}, "latest"],
-                    client,
+                    [
+                        {
+                            "to": CHOG_CONTRACT,
+                            "data": (
+                                ChogReader.SELECTORS["tokenOfOwnerByIndex"]
+                                + ChogReader._encode_address(address)
+                                + ChogReader._encode_uint256(index)
+                            ),
+                        },
+                        "latest",
+                    ],
                 )
-                if not result or result == "0x":
-                    owned = []  # not enumerable: use the scan below
+                for index in range(count)
+            ]
+            responses = await ChogReader._rpc_batch(enumerable_requests, client)
+
+            enumerable_ids: List[int] = []
+            for response in responses:
+                if (
+                    not response
+                    or "result" not in response
+                    or response["result"] in (None, "0x")
+                ):
+                    enumerable_ids = []
                     break
-                owned.append(int(result, 16))
+                enumerable_ids.append(int(response["result"], 16))
 
-            if owned:
-                print(f"[chog] enumerable path found tokens: {owned}")
-                return owned
+            if enumerable_ids:
+                print(f"[chog] enumerable path found tokens: {enumerable_ids}")
+                return enumerable_ids
 
-            # --- Slow path: scan token IDs in parallel ---
-            if max_scan is not None:
-                upper = max_scan
-            else:
-                supply = await ChogReader.get_total_supply(client)
-                upper = (supply + 200) if supply else MAX_TOKEN_ID_FALLBACK
-                upper = min(upper, MAX_TOKEN_ID_CEILING)
-            print(f"[chog] not enumerable, scanning token IDs 0..{upper}")
+            # --- Slow path: look the wallet up in the owner table ---
+            owners, complete = await ChogReader._get_owner_map(client)
+            owned = sorted(t for t, owner in owners.items() if owner == target)
 
-            semaphore = asyncio.Semaphore(SCAN_CONCURRENCY)
-
-            async def check(token_id: int) -> Optional[int]:
-                async with semaphore:
-                    owner = await ChogReader.get_owner(token_id, client)
-                return token_id if owner and owner.lower() == target else None
-
-            owned = []
-            for start in range(0, upper + 1, 100):
-                ids = range(start, min(start + 100, upper + 1))
-                results = await asyncio.gather(*(check(t) for t in ids))
-                owned.extend(t for t in results if t is not None)
-                if len(owned) >= balance:
-                    break
-
-            print(f"[chog] scan found tokens: {owned}")
+            if len(owned) < balance:
+                print(
+                    f"[chog] WARNING found {len(owned)} of {balance} tokens "
+                    f"(table complete: {complete})"
+                )
+            print(f"[chog] found tokens: {owned}")
             return owned
 
+    # ------------------------------------------------------------------
+    # Full pipeline
+    # ------------------------------------------------------------------
     @staticmethod
     async def get_chog_stats(address: str) -> Optional[Dict[str, Any]]:
         """
@@ -344,9 +530,11 @@ class ChogReader:
         Returns None if no Chog found or no metadata could be fetched.
         """
         key = address.lower()
-        if key in _STATS_CACHE:
+
+        cached = _STATS_CACHE.get(key)
+        if cached and (time.time() - cached.get("ts", 0)) < STATS_TTL_SECONDS:
             print(f"[chog] cache hit for {address}")
-            return _STATS_CACHE[key]
+            return cached["stats"]
 
         token_ids = await ChogReader.get_owned_token_ids(address)
         if not token_ids:
@@ -369,7 +557,8 @@ class ChogReader:
                 "totalOwned": len(token_ids),
                 "metadata": metadata,
             }
-            _STATS_CACHE[key] = stats
+            _STATS_CACHE[key] = {"ts": time.time(), "stats": stats}
+            _save_disk_cache()
             return stats
 
         print("[chog] could not load metadata for any token")
