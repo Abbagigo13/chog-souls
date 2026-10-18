@@ -37,6 +37,15 @@ function normalizeRival(rival) {
   return { ...rival, imageUrl: resolveImage(rival.imageUrl) };
 }
 
+function normalizeBattle(battle) {
+  if (!battle) return battle;
+  return {
+    ...battle,
+    player: { ...battle.player, image: resolveImage(battle.player?.image) },
+    rival: { ...battle.rival, image: resolveImage(battle.rival?.image) },
+  };
+}
+
 function withNormalizedSoul(data, previous) {
   if (data && data.soul) data.soul = normalizeSoul(data.soul, previous);
   return data;
@@ -104,6 +113,7 @@ export async function apiRandomRival() {
   return data;
 }
 
+// Original one-shot battle (kept for compatibility)
 export async function apiBattle(rivalId) {
   const previous = readCurrentSoul();
   const response = await postJson(`/arena/battle/${rivalId}`, { soul: previous });
@@ -112,6 +122,41 @@ export async function apiBattle(rivalId) {
   }
   const data = withNormalizedSoul(await response.json(), previous);
   if (data && data.rival) data.rival = normalizeRival(data.rival);
+  return data;
+}
+
+// Turn-based fight: start it, then send one request per round
+export async function apiFightStart(rivalId, holderTier = 0) {
+  const previous = readCurrentSoul();
+  const response = await postJson("/arena/fight/start", {
+    soul: previous,
+    rival_id: rivalId,
+    holder_tier: holderTier,
+  });
+  if (!response.ok) {
+    throw new Error("Could not start the battle");
+  }
+  const data = await response.json();
+  return { ...data, battle: normalizeBattle(data.battle) };
+}
+
+export async function apiFightRound(battle, move) {
+  const previous = readCurrentSoul();
+  const response = await postJson("/arena/fight/round", {
+    soul: previous,
+    battle,
+    move,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "That round failed");
+  }
+  const data = await response.json();
+  data.battle = normalizeBattle(data.battle);
+  if (data.final) {
+    data.final = withNormalizedSoul(data.final, previous);
+    data.final.rival = normalizeRival(data.final.rival);
+  }
   return data;
 }
 

@@ -9,6 +9,7 @@ import uuid
 from openai import OpenAI
 
 from ..schemas.soul import Soul, Memory, SoulStats, Trait
+from ..services import battle_engine
 from ..services.soul_engine import SoulEngine
 from ..services.arena_engine import ArenaEngine
 from ..services.evolution_engine import EvolutionEngine
@@ -76,6 +77,18 @@ def mark_faded_memories(soul: Soul) -> None:
         memory.faded = memory.importance < 10
 
 
+def trim_text(text: str, limit: int = 280) -> str:
+    """Shorten text for a memory, cutting at the end of a sentence."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "), cut.rfind("."))
+    if end > 60:
+        return cut[: end + 1]
+    return cut.rstrip() + "..."
+
+
 # --- The demo Soul: a real Chog from the collection (a fresh copy every time;
 #     nothing is stored on the server) ---
 DEMO_SOUL_ID = "demo"
@@ -138,6 +151,16 @@ class ChatRequest(BaseModel):
 class ChoiceRequest(BaseModel):
     action: str
     soul: Optional[Soul] = None
+
+class FightStartRequest(BaseModel):
+    soul: Optional[Soul] = None
+    rival_id: str
+    holder_tier: int = 0
+
+class FightRoundRequest(BaseModel):
+    soul: Optional[Soul] = None
+    battle: dict
+    move: str
 
 class ImportChogRequest(BaseModel):
     address: str
@@ -404,8 +427,14 @@ async def make_choice(request: ChoiceRequest):
 
 # --- Arena: Random Rival + Taunt ---
 
+def pick_rival(soul: Soul) -> dict:
+    """A rival near the player's level (a level 1 Chog is not thrown at the Sage)."""
+    closest = sorted(RIVALS, key=lambda r: abs(r["level"] - soul.level))
+    return random.choice(closest[:5])
+
+
 async def build_random_rival(soul: Soul) -> dict:
-    rival = random.choice(RIVALS)
+    rival = pick_rival(soul)
     taunt = await RivalEngine.generate_taunt(soul, rival)
 
     return {
@@ -435,7 +464,185 @@ async def post_random_rival(request: Optional[SoulOnlyRequest] = None):
     return await build_random_rival(soul)
 
 
-# --- Arena: Battle with the specified rival ---
+# --- Arena: turn-based fight (start, then one request per round) ---
+
+def _soul_for_battle(soul: Soul) -> dict:
+    return {
+        "name": soul.name,
+        "level": soul.level,
+        "stats": soul.stats.model_dump(),
+        "traits": [t.model_dump() for t in soul.traits],
+        "image": soul.image_url,
+    }
+
+
+def _find_rival(rival_id: str) -> dict:
+    rival = next((r for r in RIVALS if r["id"] == rival_id), None)
+    if not rival:
+        raise HTTPException(status_code=404, detail="Rival not found")
+    return rival
+
+
+async def settle_fight(soul: Soul, rival: dict, battle: dict) -> dict:
+    """Rewards, memories, level-ups and the AI recap once a fight is over."""
+    won = bool(battle["won"])
+    rounds = len(battle["history"])
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a dramatic fighting game announcer for the CHOG SOULS universe.",
+                },
+                {"role": "user", "content": battle_engine.recap_prompt(battle)},
+            ],
+            temperature=0.8,
+            max_tokens=220,
+        )
+        narrative = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Narrative AI error: {e}")
+        narrative = (
+            f"{soul.name} "
+            f"{'overpowered' if won else 'was defeated by'} "
+            f"{rival['name']} over {rounds} rounds."
+        )
+
+    post_battle_line = await RivalEngine.generate_post_battle_line(soul, rival, won)
+
+    # --- XP: base + first win of the day + win streak ---
+    today_str = datetime.now().date().isoformat()
+    breakdown = []
+    base_xp = 30 if won else 10
+    xp_total = apply_xp_reward(soul, base_xp)
+    breakdown.append({"label": "Victory" if won else "Good effort", "xp": xp_total})
+
+    if won:
+        soul.battles_won += 1
+        soul.win_streak += 1
+        if soul.last_win_date != today_str:
+            bonus = apply_xp_reward(soul, 20)
+            xp_total += bonus
+            breakdown.append({"label": "First win of the day", "xp": bonus})
+        if soul.win_streak >= 2:
+            streak_bonus = apply_xp_reward(soul, min(25, 5 * (soul.win_streak - 1)))
+            xp_total += streak_bonus
+            breakdown.append({"label": f"{soul.win_streak}-win streak", "xp": streak_bonus})
+        soul.last_win_date = today_str
+    else:
+        soul.battles_lost += 1
+        soul.win_streak = 0
+
+    level_info = check_level_up(soul)
+
+    if level_info["leveled_up"]:
+        level_memory = Memory(
+            id=str(uuid.uuid4()),
+            title=f"Reached Level {level_info['new_level']}",
+            text=f"{soul.name} ascended in the Arena through victory and combat.",
+            importance=90,
+            timestamp=datetime.now().isoformat(),
+            faded=False,
+        )
+        soul.memories.append(level_memory)
+
+    evolution_info = EvolutionEngine.check_evolution(soul)
+
+    if evolution_info["evolved"]:
+        evolution_memory = Memory(
+            id=str(uuid.uuid4()),
+            title=f"Transformed: {evolution_info['new_archetype']}",
+            text=f"{soul.name}'s nature shifted from {evolution_info['old_archetype']} to {evolution_info['new_archetype']}.",
+            importance=95,
+            timestamp=datetime.now().isoformat(),
+            faded=False,
+        )
+        soul.memories.append(evolution_memory)
+        soul.evolutions_count += 1
+
+    memory_text = trim_text(narrative)
+    battle_importance = MemoryEngine.score_importance(
+        memory_text=memory_text,
+        memory_title=f"{'Victory' if won else 'Defeat'} vs {rival['name']}",
+        stat_changes=None,
+        base_importance=75 if won else 60,
+        is_event=True,
+    )
+
+    new_memory = Memory(
+        id=str(uuid.uuid4()),
+        title=f"{'Victory' if won else 'Defeat'} vs {rival['name']}",
+        text=memory_text,
+        importance=battle_importance,
+        timestamp=datetime.now().isoformat(),
+        faded=False,
+    )
+    soul.memories.append(new_memory)
+    await MemoryEngine.summarize_old_memories(soul)
+
+    newly_unlocked = RetentionEngine.check_achievements(soul)
+
+    mark_faded_memories(soul)
+
+    return {
+        "won": won,
+        "soul_power": battle["player"]["hp"],   # the Arena shows remaining HP here
+        "rival_power": battle["rival"]["hp"],
+        "rounds": rounds,
+        "narrative": narrative,
+        "post_battle_line": post_battle_line,
+        "xp_gained": xp_total,
+        "xp_breakdown": breakdown,
+        "base_xp": base_xp,
+        "win_streak": soul.win_streak,
+        "is_demo_penalty": soul.is_demo,
+        "leveled_up": level_info["leveled_up"],
+        "new_level": level_info["new_level"],
+        "soul": soul,
+        "evolution_info": evolution_info,
+        "achievements_unlocked": newly_unlocked,
+        "rival": rival,
+    }
+
+
+@router.post("/arena/fight/start")
+async def fight_start(request: FightStartRequest):
+    soul = resolve_soul(request.soul)
+    rival = _find_rival(request.rival_id)
+    battle = battle_engine.start_battle(
+        _soul_for_battle(soul), rival, request.holder_tier
+    )
+    return {"battle": battle}
+
+
+@router.post("/arena/fight/round")
+async def fight_round(request: FightRoundRequest):
+    soul = resolve_soul(request.soul)
+
+    try:
+        result = battle_engine.play_round(request.battle, request.move)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (KeyError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid battle state")
+
+    state = result["battle"]
+    response = {
+        "battle": state,
+        "round": result["round"],
+        "finished": state["finished"],
+    }
+
+    if state["finished"]:
+        rival = _find_rival(state["rival_id"])
+        response["final"] = await settle_fight(soul, rival, state)
+
+    return response
+
+
+# --- Arena: Battle with the specified rival (original one-shot version) ---
 
 @router.post("/arena/battle/{rival_id}")
 async def arena_battle(rival_id: str, request: Optional[SoulOnlyRequest] = None):

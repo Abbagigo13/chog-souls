@@ -14,6 +14,25 @@ client = OpenAI(
 
 MODEL_NAME = os.getenv("AI_MODEL", "qwen-max")
 
+# How each archetype talks, so every rival sounds like itself
+PERSONAS = {
+    "The Cold Strategist": "cold, calculating, cunning; a chessmaster who speaks in odds and plans",
+    "The Shadow Tyrant": "menacing and domineering; treats everyone as a subject to be crushed",
+    "The Cold Oracle": "cryptic and serene; speaks like a prophet who has already seen the ending",
+    "The Loyal Trickster": "playful, mischievous and warm; teases, but never betrays a friend",
+    "The Guardian": "stoic, honourable and protective; speaks plainly and firmly",
+    "The Wanderer": "restless, weary and detached; has seen too many arenas to care much",
+    "The Opportunist": "cunning and mercantile; everything is a deal, a price or a trade",
+    "The Sage": "calm, wise and patient; speaks like a teacher who expects to be proven right",
+    "The Berserker": "furious and blunt; short, violent sentences",
+    "The Awakened": "young, eager and a little uncertain; trying hard to sound tough",
+}
+DEFAULT_PERSONA = "confident and competitive"
+
+
+def _persona(rival: dict) -> str:
+    return PERSONAS.get(rival.get("archetype", ""), DEFAULT_PERSONA)
+
 
 class RivalEngine:
 
@@ -59,10 +78,10 @@ class RivalEngine:
         Write ONE single-sentence taunt that {rival['name']} says to {soul.name} just before the battle begins.
 
         RULES:
-        1. Stay fully in character as {rival['name']} — cold, calculating, cunning (Cold Strategist archetype).
+        1. Stay fully in character as {rival['name']} ({rival['archetype']}): {_persona(rival)}.
         2. Reference specific details from {soul.name}'s stats, traits, archetype, or history.
-        3. If you're winning the rivalry, be condescending. If you're losing, be cold but defiant.
-        4. Be cryptic and menacing — NOT cartoonish. Think "calculating chessmaster", not "wrestling villain".
+        3. If you're winning the rivalry, be smug in your own style. If you're losing, be defiant in your own style.
+        4. Keep it sharp and in character, not cartoonish.
         5. Max 20 words.
         6. Do NOT include quotes in the output.
 
@@ -76,7 +95,7 @@ class RivalEngine:
         return f"""
         The battle just ended. {soul.name} {outcome} against {rival['name']}.
 
-        {rival['name']} is "The Cold Strategist" — cunning, calculating, never emotional.
+        {rival['name']} is "{rival['archetype']}": {_persona(rival)}.
         Your level: {rival['level']}.
         Your traits: {', '.join([f"{t['name']}: {t['value']}" for t in rival['traits']])}
 
@@ -86,9 +105,9 @@ class RivalEngine:
         Write ONE single-sentence reaction from {rival['name']} after the battle.
 
         RULES:
-        1. If you LOST: cold respect, but never warm. Acknowledge skill without complimenting.
-        2. If you WON: subtle condescension, but hint that {soul.name} is learning.
-        3. Stay cryptic. No cartoonish gloating.
+        1. If you LOST: grudging respect in your own style, never warm.
+        2. If you WON: gloat in your own style, but hint that {soul.name} is learning.
+        3. Stay in character. No cartoonish gloating.
         4. Max 20 words.
         5. No quotes.
 
@@ -102,7 +121,7 @@ class RivalEngine:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a cold, calculating strategist in the CHOG SOULS universe."},
+                    {"role": "system", "content": f"You are {rival['name']}, {_persona(rival)}, in the CHOG SOULS universe."},
                     {"role": "user", "content": RivalEngine._build_taunt_prompt(soul, rival)},
                 ],
                 temperature=0.85,
@@ -111,7 +130,7 @@ class RivalEngine:
             return response.choices[0].message.content.strip().strip('"').strip("'")
         except Exception as e:
             print(f"Rival taunt error: {e}")
-            return f"You enter the arena, {soul.name}. I calculated your odds. They are not favorable."
+            return f"You enter the arena, {soul.name}. I know how this ends."
 
     @staticmethod
     async def generate_post_battle_line(soul: Soul, rival: dict, won: bool) -> str:
@@ -120,7 +139,7 @@ class RivalEngine:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
-                    {"role": "system", "content": "You are a cold, calculating strategist in the CHOG SOULS universe."},
+                    {"role": "system", "content": f"You are {rival['name']}, {_persona(rival)}, in the CHOG SOULS universe."},
                     {"role": "user", "content": RivalEngine._build_post_battle_prompt(soul, rival, won)},
                 ],
                 temperature=0.85,
@@ -130,5 +149,5 @@ class RivalEngine:
         except Exception as e:
             print(f"Rival post-battle error: {e}")
             if won:
-                return "Victory was not in my calculations. Adjustments will be made."
-            return "As predicted. Your failure teaches me nothing new."
+                return "Victory was not in the plan. I will remember this."
+            return "As expected. Come back when you are ready."

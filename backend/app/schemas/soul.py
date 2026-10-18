@@ -50,6 +50,10 @@ class Soul(BaseModel):
     quests_completed: int = 0
     evolutions_count: int = 0
 
+    # --- Arena win tracking ---
+    win_streak: int = 0
+    last_win_date: str = ""
+
     # --- Real Chog binding ---
     is_demo: bool = True
     token_id: int = 0
