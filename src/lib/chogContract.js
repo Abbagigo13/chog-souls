@@ -9,6 +9,31 @@ export function isValidAddress(address) {
 }
 
 /**
+ * Public IPFS gateways throttle browsers, so Chog pictures are loaded
+ * through our own backend (which fetches each one once and keeps it).
+ * ipfs://<cid>/<file>  ->  <API_URL>/chog/image/<cid>/<file>
+ */
+function toProxyImage(image) {
+  if (typeof image !== "string") return image;
+
+  let path = null;
+  if (image.startsWith("ipfs://")) {
+    path = image.slice("ipfs://".length);
+  } else {
+    const index = image.indexOf("/ipfs/");
+    if (index !== -1) path = image.slice(index + "/ipfs/".length);
+  }
+  if (!path) return image;
+
+  if (path.startsWith("ipfs/")) path = path.slice("ipfs/".length);
+
+  const parts = path.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return image;
+
+  return `${API_URL}/chog/image/${parts[0]}/${parts[1]}`;
+}
+
+/**
  * Fetch Chog stats by wallet address.
  * The backend does all the on-chain reading and IPFS fetching.
  * Returns { tokenId, totalOwned, metadata } or null.
@@ -27,7 +52,14 @@ export async function getChogStats(ownerAddress) {
       return null;
     }
 
-    return await response.json();
+    const data = await response.json();
+    if (data && data.metadata && data.metadata.image) {
+      data.metadata = {
+        ...data.metadata,
+        image: toProxyImage(data.metadata.image),
+      };
+    }
+    return data;
   } catch (err) {
     console.error("Chog import network error:", err);
     return null;

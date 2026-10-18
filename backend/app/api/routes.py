@@ -2,7 +2,7 @@
 import os
 import random
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from datetime import datetime
 import uuid
@@ -16,6 +16,7 @@ from ..services.quest_engine import QuestEngine
 from ..services.rival_engine import RivalEngine
 from ..services.chog_reader import ChogReader
 from ..services.chog_token_reader import ChogTokenReader
+from ..services.image_proxy import fetch_ipfs_image
 from ..services.memory_engine import MemoryEngine
 from ..services.retention_engine import RetentionEngine, ACHIEVEMENTS
 from ..data.quests import WEEKLY_QUESTS
@@ -75,38 +76,46 @@ def mark_faded_memories(soul: Soul) -> None:
         memory.faded = memory.importance < 10
 
 
-# --- The demo Soul (a fresh copy every time; nothing is stored on the server) ---
+# --- The demo Soul: a real Chog from the collection (a fresh copy every time;
+#     nothing is stored on the server) ---
 DEMO_SOUL_ID = "demo"
 
 
 def make_demo_soul() -> Soul:
     return Soul(
         id=DEMO_SOUL_ID,
-        name="Giga",
-        archetype="The Loyal Trickster",
+        name="CHOG #1468",
+        archetype="The Awakened",
         mood="Curious",
         traits=[
-            Trait(name="Fur", value="Midnight"),
-            Trait(name="Eyes", value="Laser"),
-            Trait(name="Spirit", value="Loyal"),
-            Trait(name="Aura", value="Electric"),
+            Trait(name="Background", value="Rosie"),
+            Trait(name="Base", value="Origin"),
+            Trait(name="Skin", value="Pink"),
+            Trait(name="Side", value="Right"),
+            Trait(name="Body", value="Red Tuxedo"),
+            Trait(name="Mouth", value="Rainbow Puke"),
+            Trait(name="Eyes", value="Teary"),
+            Trait(name="Head", value="Wizard Hat"),
+            Trait(name="Form", value="Chog"),
+            Trait(name="Tier", value="Common"),
+            Trait(name="Naked", value="No"),
         ],
-        stats=SoulStats(courage=72, loyalty=86, intelligence=78, greed=42),
-        level=4,
-        xp=68,
+        stats=SoulStats(courage=50, loyalty=55, intelligence=57, greed=36),
+        level=1,
+        xp=0,
         xp_to_next_level=100,
         memories=[
             Memory(
                 id=str(uuid.uuid4()),
                 title="Soul awakened",
-                text="Giga woke up with a strong loyalty signature.",
+                text="CHOG #1468 woke up as a demo Soul.",
                 importance=88,
                 timestamp=datetime.now().isoformat(),
                 faded=False,
             )
         ],
         is_demo=True,
-        image_url="/chogs/demo.svg",
+        image_url="chog:1468",
     )
 
 
@@ -562,6 +571,22 @@ async def import_chog(request: ImportChogRequest):
     return result
 
 
+# --- Chog picture (fetched once from IPFS, then served from our own disk) ---
+
+@router.get("/chog/image/{cid}/{filename}")
+async def chog_image(cid: str, filename: str):
+    image = await fetch_ipfs_image(cid, filename)
+    if image is None:
+        raise HTTPException(status_code=404, detail="Image not available")
+
+    data, content_type = image
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 # --- $CHOG Token Balance ---
 
 @router.post("/chog/token-balance")
@@ -574,9 +599,36 @@ async def chog_token_balance(request: TokenBalanceRequest):
     return result
 
 
-# --- Demo Chog Pool ---
+# --- Demo Chog Pool: a random REAL Chog from the collection ---
+
+METADATA_FOLDER_CID = "bafybeid4ybujnscdipkno7ps5utqelp5ry5ryreqhay3zhgk3a6x4jruqu"
+COLLECTION_SIZE = 1969
+# Numbers used by the sample rivals, so a demo Chog never duplicates one
+RIVAL_NUMBERS = {420, 681, 696, 1033, 112, 1204, 556, 1777, 1411, 88}
+
 
 @router.get("/chog/demo-random")
 async def get_random_demo_chog():
-    chog = random.choice(DEMO_CHOGS)
-    return chog
+    """A random real Chog with its real traits and artwork."""
+    number = random.choice(
+        [n for n in range(1, COLLECTION_SIZE + 1) if n not in RIVAL_NUMBERS]
+    )
+    metadata = await ChogReader._fetch_metadata(
+        f"ipfs://{METADATA_FOLDER_CID}/{number}.json"
+    )
+    attributes = metadata.get("attributes") if isinstance(metadata, dict) else None
+
+    if attributes:
+        return {
+            "tokenId": number,
+            "name": metadata.get("name") or f"CHOG #{number}",
+            "imageUrl": f"chog:{number}",
+            "traits": [
+                {"name": str(a.get("trait_type")), "value": str(a.get("value"))}
+                for a in attributes
+                if isinstance(a, dict) and a.get("trait_type") is not None
+            ],
+        }
+
+    # Collection data unreachable: fall back to the saved sample Chogs
+    return random.choice(DEMO_CHOGS)

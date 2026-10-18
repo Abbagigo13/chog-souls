@@ -2891,3 +2891,29 @@ button { cursor: pointer; }
   justify-content: center;
   margin-top: 20px;
 }
+
+/* ===== Real Chog pictures: always a clean circle ===== */
+.avatar { border-radius: 50%; }
+.avatar img {
+  border-radius: 50%;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+}
+
+/* Verified ring: spin only the ring, never the picture */
+.verified-avatar {
+  animation: none;
+  background: none;
+}
+.verified-avatar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #ffd966, #ff9b54, #ffd966, #a996ff, #ffd966);
+  animation: verifiedRotate 6s linear infinite;
+}
+.verified-avatar .avatar {
+  position: relative;
+  z-index: 1;
+}

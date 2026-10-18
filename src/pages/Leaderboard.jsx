@@ -17,7 +17,7 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
 
   // Find user's rank
   const myRank = ranked.findIndex((s) => s._isMine) + 1;
-    const isDemoSoul = soul.is_demo === true || soul.id === "demo";
+  const isDemoSoul = soul.is_demo === true || soul.id === "demo";
 
   return (
     <div className="page">
@@ -29,7 +29,7 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
         </div>
       </div>
 
-            <section className="your-rank-card">
+      <section className="your-rank-card">
         <div className="rank-info">
           <p className="eyebrow">YOUR RANK</p>
           {isDemoSoul ? (
@@ -63,7 +63,7 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
       </div>
 
       <div className="leaderboard-list">
-                {ranked.map((entry, index) => (
+        {ranked.map((entry, index) => (
           <div
             key={entry.id}
             className={`leaderboard-row ${entry._isMine ? "mine" : ""} ${!entry._isMine ? "clickable" : ""}`}
@@ -96,11 +96,12 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
           </div>
         ))}
 
-      <p className="leaderboard-note">
-        Rivals are AI-generated for this demo. Real Souls will appear as the
-        community grows.
-      </p>
+        <p className="leaderboard-note">
+          Sample Souls use real Chog artwork and traits; their levels and stats
+          are simulated for this demo. Real Souls will appear as the community
+          grows.
+        </p>
+      </div>
     </div>
-  </div>
   );
 }

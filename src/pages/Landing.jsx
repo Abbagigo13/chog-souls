@@ -1,7 +1,17 @@
 // src/pages/Landing.jsx
+import { useMemo } from "react";
 import Avatar from "../components/Avatar";
+import { chogImageUrl } from "../lib/chogImage";
+
+// Real Chogs that take turns in the hero (a new one each visit)
+const HERO_CHOGS = [1777, 420, 1411, 556, 88, 1204, 681, 1033];
 
 export default function Landing({ onDemo, onConnect }) {
+  const heroImage = useMemo(
+    () => chogImageUrl(HERO_CHOGS[Math.floor(Math.random() * HERO_CHOGS.length)]),
+    []
+  );
+
   return (
     <main className="landing">
       <div className="grid-overlay" />
@@ -10,7 +20,7 @@ export default function Landing({ onDemo, onConnect }) {
         <p className="landing-kicker">BUILT FOR CHOGATHON</p>
 
         <div className="landing-avatar-glow">
-          <Avatar size="hero" />
+          <Avatar size="hero" imageUrl={heroImage} />
         </div>
 
         <p className="hero-label">YOUR NFT IS ALIVE.</p>
@@ -58,7 +68,7 @@ export default function Landing({ onDemo, onConnect }) {
           <div className="landing-feature">
             <span className="landing-feature-icon">🏆</span>
             <h3>Global Rankings</h3>
-            <p>Compete against nine rival Souls for the top spot.</p>
+            <p>Compete against nine sample Souls for the top spot.</p>
           </div>
         </section>
 

@@ -1,4 +1,7 @@
 // src/lib/api.js
+import { decodeChogTraits } from "./traitDecoder";
+import { resolveImage } from "./chogImage";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 
 // Same key that useSoul.js saves the Soul under
@@ -19,14 +22,19 @@ function readCurrentSoul() {
 function normalizeSoul(returned, previous) {
   if (!returned) return returned;
   const prev = previous || {};
-  const imageUrl = returned.image_url || prev.imageUrl || undefined;
+  const imageUrl = resolveImage(returned.image_url) || prev.imageUrl || undefined;
   const tokenId = prev.tokenId ?? (returned.token_id || undefined);
   return {
     ...returned,
     imageUrl,
-    image_url: returned.image_url || imageUrl || "",
+    image_url: imageUrl || "",
     tokenId,
   };
+}
+
+function normalizeRival(rival) {
+  if (!rival) return rival;
+  return { ...rival, imageUrl: resolveImage(rival.imageUrl) };
 }
 
 function withNormalizedSoul(data, previous) {
@@ -91,7 +99,9 @@ export async function apiRandomRival() {
   if (!response.ok) {
     throw new Error("Could not load random rival");
   }
-  return response.json();
+  const data = await response.json();
+  if (data && data.rival) data.rival = normalizeRival(data.rival);
+  return data;
 }
 
 export async function apiBattle(rivalId) {
@@ -100,7 +110,9 @@ export async function apiBattle(rivalId) {
   if (!response.ok) {
     throw new Error("Battle API failed");
   }
-  return withNormalizedSoul(await response.json(), previous);
+  const data = withNormalizedSoul(await response.json(), previous);
+  if (data && data.rival) data.rival = normalizeRival(data.rival);
+  return data;
 }
 
 export async function apiDailyCheck() {
@@ -131,12 +143,29 @@ export async function apiChogBalance(address) {
   return response.json();
 }
 
+// A random REAL Chog from the collection (real traits + real artwork).
+// Its stats are worked out from the traits, same as an imported Chog.
 export async function apiRandomDemoChog() {
   const response = await fetch(`${API_URL}/chog/demo-random`);
   if (!response.ok) {
     throw new Error("Could not load a demo Chog");
   }
-  return response.json();
+  const chog = await response.json();
+
+  const decoded = decodeChogTraits({
+    name: chog.name,
+    attributes: (chog.traits || []).map((t) => ({
+      trait_type: t.name,
+      value: t.value,
+    })),
+  });
+
+  return {
+    ...chog,
+    traits: decoded.traits,
+    stats: decoded.stats,
+    imageUrl: resolveImage(chog.imageUrl),
+  };
 }
 
 export async function apiAchievements() {
