@@ -16,7 +16,7 @@ from ..services.evolution_engine import EvolutionEngine
 from ..services.quest_engine import QuestEngine
 from ..services.rival_engine import RivalEngine
 from ..services.chog_reader import ChogReader
-from ..services.chog_token_reader import ChogTokenReader
+from ..services.chog_token_reader import ChogTokenReader, XP_BONUS_PER_TIER_PCT
 from ..services.image_proxy import fetch_ipfs_image
 from ..services.memory_engine import MemoryEngine
 from ..services.retention_engine import RetentionEngine, ACHIEVEMENTS
@@ -512,7 +512,7 @@ async def settle_fight(soul: Soul, rival: dict, battle: dict) -> dict:
 
     post_battle_line = await RivalEngine.generate_post_battle_line(soul, rival, won)
 
-    # --- XP: base + first win of the day + win streak ---
+    # --- XP: base + first win of the day + win streak + $CHOG holder boost ---
     today_str = datetime.now().date().isoformat()
     breakdown = []
     base_xp = 30 if won else 10
@@ -534,6 +534,16 @@ async def settle_fight(soul: Soul, rival: dict, battle: dict) -> dict:
     else:
         soul.battles_lost += 1
         soul.win_streak = 0
+
+    holder_tier = max(0, min(3, int(battle.get("holder_tier", 0) or 0)))
+    if holder_tier > 0:
+        holder_boost = max(1, round(xp_total * XP_BONUS_PER_TIER_PCT * holder_tier / 100))
+        soul.xp += holder_boost
+        xp_total += holder_boost
+        breakdown.append({
+            "label": f"$CHOG holder boost (Tier {holder_tier})",
+            "xp": holder_boost,
+        })
 
     level_info = check_level_up(soul)
 
@@ -597,6 +607,7 @@ async def settle_fight(soul: Soul, rival: dict, battle: dict) -> dict:
         "xp_breakdown": breakdown,
         "base_xp": base_xp,
         "win_streak": soul.win_streak,
+        "holder_tier": holder_tier,
         "is_demo_penalty": soul.is_demo,
         "leveled_up": level_info["leveled_up"],
         "new_level": level_info["new_level"],
@@ -794,7 +805,7 @@ async def chog_image(cid: str, filename: str):
     )
 
 
-# --- $CHOG Token Balance ---
+# --- $CHOG Token: balance + holder tier, and the list of tiers ---
 
 @router.post("/chog/token-balance")
 async def chog_token_balance(request: TokenBalanceRequest):
@@ -804,6 +815,11 @@ async def chog_token_balance(request: TokenBalanceRequest):
 
     result = await ChogTokenReader.get_balance(address)
     return result
+
+
+@router.get("/chog/token-tiers")
+async def chog_token_tiers():
+    return ChogTokenReader.public_tiers()
 
 
 # --- Demo Chog Pool: a random REAL Chog from the collection ---

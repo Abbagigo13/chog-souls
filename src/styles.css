@@ -2968,3 +2968,16 @@ button { cursor: pointer; }
 .bt-xp-list div { display: flex; justify-content: space-between; color: var(--muted); }
 .bt-xp-list b { color: var(--text); }
 .bt-error { margin-top: 12px; padding: 12px 14px; border: 1px solid rgba(255, 145, 174, 0.4); border-radius: 14px; font-size: 13px; color: var(--danger); }
+
+/* ===== $CHOG page + holder chip ===== */
+.tk-tier-card { margin-top: 18px; padding: 22px 24px; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); }
+.tk-tier-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.tk-tier-name { font-size: 22px; font-weight: 900; }
+.tk-tier-sub { margin: 10px 0 0; font-size: 12px; letter-spacing: 0.04em; color: var(--muted); }
+.tk-note { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.tk-link { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.tk-link input { flex: 1; min-width: 220px; padding: 13px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); color: var(--text); }
+.tk-link input::placeholder { color: var(--muted); }
+.tk-error { margin-top: 12px; padding: 12px 14px; border: 1px solid rgba(255, 145, 174, 0.4); border-radius: 14px; font-size: 13px; color: var(--danger); }
+.tk-chip { display: inline-flex; align-items: center; padding: 7px 12px; border: 1px solid rgba(255, 217, 102, 0.55); border-radius: 999px; background: rgba(255, 217, 102, 0.08); font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: #ffd966; }
+.chog-footer-note a { color: var(--purple-soft); }

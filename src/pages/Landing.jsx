@@ -48,30 +48,6 @@ export default function Landing({ onDemo, onConnect }) {
           <span /> ZERO-COST DEMO MODE · NO WALLET REQUIRED
         </p>
 
-        {/* Feature highlights */}
-        <section className="landing-features">
-          <div className="landing-feature">
-            <span className="landing-feature-icon">🧠</span>
-            <h3>AI-Powered Personality</h3>
-            <p>Every Soul thinks, remembers, and evolves through conversation.</p>
-          </div>
-          <div className="landing-feature">
-            <span className="landing-feature-icon">⚔️</span>
-            <h3>Live Arena Battles</h3>
-            <p>Stats, traits, and history determine every fight.</p>
-          </div>
-          <div className="landing-feature">
-            <span className="landing-feature-icon">🎭</span>
-            <h3>Archetype Evolution</h3>
-            <p>Your choices reshape your Soul's identity over time.</p>
-          </div>
-          <div className="landing-feature">
-            <span className="landing-feature-icon">🏆</span>
-            <h3>Global Rankings</h3>
-            <p>Compete against nine sample Souls for the top spot.</p>
-          </div>
-        </section>
-
         <footer className="landing-footer">
           <p>Powered by Alibaba Qwen · Built on Monad</p>
         </footer>

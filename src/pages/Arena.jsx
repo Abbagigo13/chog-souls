@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Avatar from "../components/Avatar";
 import { apiRandomRival, apiFightStart, apiFightRound } from "../lib/api";
+import { getHolderTier } from "../lib/perks";
 import { playSound } from "../lib/sound";
 
 // Strike > Outwit > Gamble > Guard > Strike
@@ -81,7 +82,9 @@ export default function Arena({ soul, onBattleComplete }) {
     setBusy(true);
     setError("");
     try {
-      const data = await apiFightStart(rival.id);
+      // $CHOG holder tier (0 if no wallet or balance): makes the signature move stronger
+      const holderTier = await getHolderTier();
+      const data = await apiFightStart(rival.id, holderTier);
       setBattle(data.battle);
       setLastRound(null);
       playSound("chatReply");
@@ -270,6 +273,11 @@ export default function Arena({ soul, onBattleComplete }) {
             <span className="bt-round">
               ROUND {battle.round} OF {battle.max_rounds}
             </span>
+            {battle.holder_tier > 0 && (
+              <span className="tk-chip">
+                $CHOG TIER {battle.holder_tier} · SIGNATURE +{battle.holder_tier * 10}%
+              </span>
+            )}
             <div className="bt-intel">
               {intent()}
               <small>
