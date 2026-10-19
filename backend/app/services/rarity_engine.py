@@ -2,12 +2,28 @@
 from ..schemas.soul import Soul
 
 
+# The NFT's own Tier trait (as written in the collection metadata), plus the
+# older numeric tiers. Keep in step with src/lib/rarity.js on the frontend.
+COMMON = {"tier": "Common", "color": "#9c94aa", "score": 20}
+UNCOMMON = {"tier": "Uncommon", "color": "#8ce8b4", "score": 40}
+RARE = {"tier": "Rare", "color": "#5fa8ff", "score": 60}
+EPIC = {"tier": "Epic", "color": "#b57aff", "score": 80}
+LEGENDARY = {"tier": "Legendary", "color": "#ffd966", "score": 100}
+MYTHIC = {"tier": "Mythic", "color": "#ff6b9d", "score": 100}
+
 TIER_WEIGHTS = {
-    "1": {"tier": "Legendary", "color": "#ffd966", "score": 100},
-    "2": {"tier": "Epic", "color": "#b57aff", "score": 80},
-    "3": {"tier": "Rare", "color": "#5fa8ff", "score": 60},
-    "4": {"tier": "Uncommon", "color": "#8ce8b4", "score": 40},
-    "5": {"tier": "Common", "color": "#9c94aa", "score": 20},
+    "common": COMMON,
+    "uncommon": UNCOMMON,
+    "rare": RARE,
+    "epic": EPIC,
+    "legendary": LEGENDARY,
+    "mythic": MYTHIC,
+    # older numeric tiers
+    "1": LEGENDARY,
+    "2": EPIC,
+    "3": RARE,
+    "4": UNCOMMON,
+    "5": COMMON,
 }
 
 
@@ -15,14 +31,17 @@ class RarityEngine:
 
     @staticmethod
     def compute(soul: Soul) -> dict:
-        # Find Tier trait
-        tier_value = "5"
+        """
+        The tier and colour are the NFT's real Tier trait. The score also counts
+        stats and level; it is only used for ranking.
+        """
+        tier_value = "common"
         for t in soul.traits:
             if t.name == "Tier":
-                tier_value = str(t.value)
+                tier_value = str(t.value).strip().lower()
                 break
 
-        tier_info = TIER_WEIGHTS.get(tier_value, TIER_WEIGHTS["5"])
+        tier_info = TIER_WEIGHTS.get(tier_value, COMMON)
 
         # Stat bonus from top 2 stats
         stat_values = sorted(
@@ -36,18 +55,4 @@ class RarityEngine:
 
         total = min(100, tier_info["score"] + stat_bonus + level_bonus)
 
-        # Final tier
-        if total >= 95:
-            final_tier, final_color = "Mythic", "#ff6b9d"
-        elif total >= 85:
-            final_tier, final_color = "Legendary", "#ffd966"
-        elif total >= 70:
-            final_tier, final_color = "Epic", "#b57aff"
-        elif total >= 50:
-            final_tier, final_color = "Rare", "#5fa8ff"
-        elif total >= 30:
-            final_tier, final_color = "Uncommon", "#8ce8b4"
-        else:
-            final_tier, final_color = "Common", "#9c94aa"
-
-        return {"tier": final_tier, "color": final_color, "score": total}
+        return {"tier": tier_info["tier"], "color": tier_info["color"], "score": total}

@@ -9,8 +9,7 @@ import { resolveImage } from "../lib/chogImage";
 import { renderToPng, downloadPng, shareToX, imageToPngDataUrl } from "../lib/shareImage";
 import { playSound } from "../lib/sound";
 
-export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
-  const isDemo = soul.is_demo === true || soul.id === "demo";
+export default function Dashboard({ soul, navigate }) {
   const rarity = computeRarity(soul);
 
   const cardRef = useRef(null);
@@ -62,20 +61,6 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
 
   return (
     <div className="page">
-      {isDemo && (
-        <section className="demo-banner" onClick={() => navigate("import")}>
-          <span className="demo-banner-icon">⚠️</span>
-          <div>
-            <b>DEMO MODE — UNRANKED</b>
-            <p>
-              You're playing a demo Soul. Import a real Chog for full XP,
-              verified status, and leaderboard ranking.
-            </p>
-          </div>
-          <span className="demo-banner-arrow">→</span>
-        </section>
-      )}
-
       <section className="dashboard-hero">
         <div>
           <p className="eyebrow">
@@ -85,9 +70,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
           <h1>{soul.name}</h1>
           <div className="archetype-row">
             <p className="archetype">{soul.archetype}</p>
-            {!isDemo && (
-              <span className="verified-badge">✓ VERIFIED</span>
-            )}
+            <span className="verified-badge">✓ ON-CHAIN</span>
             <span
               className="rarity-badge"
               style={{ color: rarity.color, borderColor: rarity.color }}
@@ -103,7 +86,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
             ))}
           </div>
         </div>
-        <div className={isDemo ? "" : "verified-avatar"}>
+        <div className="verified-avatar">
           <Avatar size="large" level={soul.level} imageUrl={soul.imageUrl} />
         </div>
       </section>
@@ -159,20 +142,18 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
         </button>
       </section>
 
-      {isDemo && (
-        <section className="import-prompt">
-          <div>
-            <p className="eyebrow">BIND A REAL CHOG</p>
-            <h3>Import your Chog to birth a new Soul.</h3>
-            <p>
-              Paste any wallet address that holds a Chog Genesis NFT on Monad Mainnet.
-            </p>
-          </div>
-          <button className="primary-button" onClick={() => navigate("import")}>
-            IMPORT CHOG →
-          </button>
-        </section>
-      )}
+      <section className="import-prompt">
+        <div>
+          <p className="eyebrow">SWITCH CHOG</p>
+          <h3>Playing with a different Chog?</h3>
+          <p>
+            Import another Chog. Each Chog keeps its own progress, so you can come back to this one.
+          </p>
+        </div>
+        <button className="secondary-button" onClick={() => navigate("import")}>
+          IMPORT ANOTHER CHOG →
+        </button>
+      </section>
 
       <section>
         <div className="section-heading">

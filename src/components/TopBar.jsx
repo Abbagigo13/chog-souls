@@ -6,7 +6,6 @@ export default function TopBar({
   wallet,
   navigate,
   onConnect,
-  onReset,
   muted,
   onToggleMute,
 }) {
@@ -37,8 +36,8 @@ export default function TopBar({
         {wallet ? (
           <button
             className="wallet-pill"
-            onClick={onReset}
-            title="Click to reset Soul"
+            onClick={() => navigate("import")}
+            title="Switch Chog"
           >
             {wallet.slice(0, 6)}...{wallet.slice(-4)}
           </button>
@@ -51,4 +50,3 @@ export default function TopBar({
     </header>
   );
 }
-

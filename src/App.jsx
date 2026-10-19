@@ -14,7 +14,7 @@ import SoulProfile from "./pages/SoulProfile";
 import Onboarding, { shouldShowOnboarding } from "./components/Onboarding";
 import TopBar from "./components/TopBar";
 import BottomNav from "./components/BottomNav";
-import { useSoul } from "./hooks/useSoul";
+import { useSoul, getSavedSoul } from "./hooks/useSoul";
 import { connectWallet } from "./lib/wallet";
 import { getChogStats } from "./lib/chogContract";
 import { decodeChogTraits } from "./lib/traitDecoder";
@@ -37,7 +37,7 @@ export default function App() {
   // ALL HOOKS MUST BE DECLARED FIRST — BEFORE ANY RETURNS.
   // ============================================================
   const [page, setPage] = useState("landing");
-  const { soul, updateSoul, resetSoul, loading } = useSoul();
+  const { soul, updateSoul, loading } = useSoul();
   const [wallet, setWallet] = useState(null);
   const [toast, setToast] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -70,7 +70,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [evolutionEvent]);
 
-  // --- Daily visit check: once per Soul per session (works for ANY Soul) ---
+  // --- Daily visit check: once per Soul per session ---
   const dailyCheckedFor = useRef(null);
   const activeSoulId = soul ? soul.id : null;
   useEffect(() => {
@@ -110,14 +110,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSoulId]);
 
-  // --- Onboarding trigger ---
+  // --- Onboarding trigger (first visit with a Soul) ---
   useEffect(() => {
-    if (!soul) return;
-    if (soul.id !== "demo") return;
+    if (!activeSoulId) return;
     if (shouldShowOnboarding()) {
       setShowOnboarding(true);
     }
-  }, [soul]);
+  }, [activeSoulId]);
 
   // ============================================================
   // HANDLERS (functions, not hooks — safe after useEffect blocks)
@@ -131,22 +130,7 @@ export default function App() {
     setToast(newMuted ? "Sound off" : "Sound on");
   };
 
-  async function handleConnect() {
-    try {
-      const address = await connectWallet();
-      setWallet(address);
-      setToast("Wallet connected");
-      setPage("dashboard");
-    } catch (error) {
-      setToast(error.message || "Wallet connection failed");
-    }
-  }
-
-  function handleDemo() {
-    setToast("Demo Soul awakened");
-    setPage("dashboard");
-  }
-
+  // Turn a wallet address into a Soul: the Chog it holds becomes the Soul
   async function handleImportAddress(address, network = "mainnet") {
     try {
       setToast("Reading Chog from Monad Mainnet...");
@@ -159,37 +143,54 @@ export default function App() {
 
       const decoded = decodeChogTraits(result.metadata);
       const imageUrl = extractImageUrl(result.metadata);
+      const id = `chog-${result.tokenId}`;
+      const saved = getSavedSoul(id);
 
-      const newSoul = {
-        id: `chog-${result.tokenId}`,
-        name: decoded.name,
-        archetype: "The Awakened",
-        mood: "Curious",
-        traits: decoded.traits,
-        stats: decoded.stats,
-        level: 1,
-        xp: 0,
-        xp_to_next_level: 100,
-        imageUrl: imageUrl,
-        image_url: imageUrl || "",
-        tokenId: result.tokenId,
-        token_id: result.tokenId,
-        is_demo: false,
-        memories: [
-          {
-            id: `awaken-${Date.now()}`,
-            title: "Soul awakened",
-            text: `${decoded.name} was imported from a real Chog NFT (token ${result.tokenId}).`,
-            importance: 88,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      };
+      let nextSoul;
+      if (saved) {
+        // A Chog we already know: keep its progress, refresh its look
+        nextSoul = {
+          ...saved,
+          name: decoded.name,
+          traits: decoded.traits,
+          imageUrl: imageUrl,
+          image_url: imageUrl || "",
+          tokenId: result.tokenId,
+          token_id: result.tokenId,
+          is_demo: false,
+        };
+      } else {
+        nextSoul = {
+          id,
+          name: decoded.name,
+          archetype: "The Awakened",
+          mood: "Curious",
+          traits: decoded.traits,
+          stats: decoded.stats,
+          level: 1,
+          xp: 0,
+          xp_to_next_level: 100,
+          imageUrl: imageUrl,
+          image_url: imageUrl || "",
+          tokenId: result.tokenId,
+          token_id: result.tokenId,
+          is_demo: false,
+          memories: [
+            {
+              id: `awaken-${Date.now()}`,
+              title: "Soul awakened",
+              text: `${decoded.name} was imported from a real Chog NFT (token ${result.tokenId}).`,
+              importance: 88,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        };
+      }
 
-      updateSoul(newSoul);
-      setToast(`${decoded.name} imported`);
+      updateSoul(nextSoul);
+      setToast(saved ? `Welcome back, ${decoded.name}` : `${decoded.name} imported`);
       setPage("dashboard");
-      return newSoul;
+      return nextSoul;
     } catch (error) {
       console.error("Import error:", error);
       setToast(error.message || "Failed to import from that address.");
@@ -197,43 +198,15 @@ export default function App() {
     }
   }
 
-  async function handleDemoChog(chog) {
+  // Connect a wallet = load the Chog that wallet holds
+  async function handleConnect() {
     try {
-      const newSoul = {
-        id: `demo-chog-${chog.tokenId}`,
-        name: chog.name,
-        archetype: "The Awakened",
-        mood: "Curious",
-        traits: chog.traits,
-        stats: chog.stats,
-        level: 1,
-        xp: 0,
-        xp_to_next_level: 100,
-        imageUrl: chog.imageUrl,
-        image_url: chog.imageUrl || "",
-        tokenId: chog.tokenId,
-        token_id: chog.tokenId || 0,
-        // Demo Chogs are NOT real NFTs: Unranked + 50% XP
-        is_demo: true,
-        memories: [
-          {
-            id: `awaken-${Date.now()}`,
-            title: "Soul awakened",
-            text: `${chog.name} was bound from the Demo Pool.`,
-            importance: 88,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      };
-
-      updateSoul(newSoul);
-      setToast(`${chog.name} bound to your Soul`);
-      setPage("dashboard");
-      return newSoul;
+      const address = await connectWallet();
+      setWallet(address);
+      const found = await handleImportAddress(address);
+      if (!found && !soul) setPage("import");
     } catch (error) {
-      console.error("Demo Chog error:", error);
-      setToast("Could not bind demo Chog.");
-      return null;
+      setToast(error.message || "Wallet connection failed");
     }
   }
 
@@ -306,10 +279,10 @@ export default function App() {
   };
 
   // ============================================================
-  // EARLY RETURN — must be AFTER all hooks
+  // EARLY RETURNS — must be AFTER all hooks
   // ============================================================
 
-  if (loading || !soul) {
+  if (loading) {
     return (
       <div style={{ color: "white", padding: "4rem", textAlign: "center" }}>
         <h2>Waking up your Soul...</h2>
@@ -317,17 +290,42 @@ export default function App() {
     );
   }
 
+  const toastView = toast ? <div className="toast">{toast}</div> : null;
+
+  // The landing page (with a Continue button if a Soul already exists)
+  if (page === "landing") {
+    return (
+      <>
+        <Landing
+          soul={soul}
+          onImport={() => setPage("import")}
+          onConnect={handleConnect}
+          onContinue={() => setPage("dashboard")}
+        />
+        {toastView}
+      </>
+    );
+  }
+
+  // No Chog yet, so no Soul: the only place to go is Import
+  if (!soul) {
+    return (
+      <div className="app-shell">
+        <main className="main-content">
+          <Import
+            onImportAddress={handleImportAddress}
+            onBack={() => setPage("landing")}
+            hasSoul={false}
+          />
+        </main>
+        {toastView}
+      </div>
+    );
+  }
+
   const shared = { soul, navigate };
 
   const renderPage = () => {
-    if (page === "dashboard")
-      return (
-        <Dashboard
-          {...shared}
-          wallet={wallet}
-          onImportAddress={handleImportAddress}
-        />
-      );
     if (page === "talk")
       return <Talk {...shared} onChat={handleChat} isThinking={isAiThinking} />;
     if (page === "quest") return <Quest {...shared} onChoice={handleChoice} />;
@@ -368,14 +366,12 @@ export default function App() {
       return (
         <Import
           onImportAddress={handleImportAddress}
-          onDemoChog={handleDemoChog}
-          navigate={navigate}
+          onBack={() => setPage("dashboard")}
+          hasSoul
         />
       );
-    return <Landing onDemo={handleDemo} onConnect={handleConnect} />;
+    return <Dashboard {...shared} />;
   };
-
-  if (page === "landing") return renderPage();
 
   return (
     <div className="app-shell">
@@ -384,13 +380,12 @@ export default function App() {
         wallet={wallet}
         navigate={navigate}
         onConnect={handleConnect}
-        onReset={resetSoul}
         muted={muted}
         onToggleMute={handleToggleMute}
       />
       <main className="main-content">{renderPage()}</main>
       <BottomNav page={page} navigate={navigate} />
-      {toast && <div className="toast">{toast}</div>}
+      {toastView}
 
       {showOnboarding && (
         <Onboarding onDismiss={() => setShowOnboarding(false)} />

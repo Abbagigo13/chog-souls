@@ -2,12 +2,19 @@
 import { useState } from "react";
 import Avatar from "../components/Avatar";
 import { isValidAddress } from "../lib/chogContract";
-import { apiRandomDemoChog } from "../lib/api";
 
-export default function Import({ onImportAddress, onDemoChog }) {
+// Public Chog holders (from MonadScan), so anyone can try the game
+const EXAMPLE_HOLDERS = [
+  "0x8D5cCD5275141De22650D9570f4f56DB87807425",
+  "0x84113421A8a564b594ee9Ae78c875310332d7023",
+  "0xE0aBd864b96a6c72d80717A750245A9f60289C93",
+];
+
+const shortAddress = (a) => `${a.slice(0, 6)}...${a.slice(-4)}`;
+
+export default function Import({ onImportAddress, onBack, hasSoul }) {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loadingDemo, setLoadingDemo] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -21,12 +28,12 @@ export default function Import({ onImportAddress, onDemoChog }) {
     }
 
     setLoading(true);
-    setStatus("Querying Monad Mainnet...");
+    setStatus("Querying Monad Mainnet... the first lookup can take a few seconds.");
 
     try {
       const result = await onImportAddress(address.trim());
       if (!result) {
-        setError("No Chog found at that address. Try another wallet or the Demo Pool below.");
+        setError("No Chog found at that address, or it could not be read. Try another wallet.");
         setLoading(false);
         setStatus("");
       }
@@ -37,32 +44,25 @@ export default function Import({ onImportAddress, onDemoChog }) {
     }
   };
 
-  const handleTryDemo = async () => {
-    setLoadingDemo(true);
-    setError("");
-    setStatus("Loading demo Chog...");
-    try {
-      const chog = await apiRandomDemoChog();
-      onDemoChog(chog);
-    } catch (err) {
-      setError("Could not load a demo Chog. Try again.");
-      setLoadingDemo(false);
-      setStatus("");
-    }
-  };
-
   return (
     <div className="page">
+      {onBack && (
+        <button className="back-button-inline" onClick={onBack}>
+          ← BACK
+        </button>
+      )}
+
       <div className="page-title">
         <div>
           <p className="eyebrow">READ-ONLY MODE</p>
           <h1>Import a Chog.</h1>
-          <p>Paste any wallet address that holds a Chog — or try a demo Chog.</p>
+          <p>
+            Your Chog is your Soul. Paste a wallet address that holds a Chog Genesis NFT.
+          </p>
         </div>
         <Avatar size="medium" />
       </div>
 
-      {/* Real import */}
       <section className="import-card">
         <div className="import-field">
           <label>WALLET ADDRESS</label>
@@ -76,7 +76,7 @@ export default function Import({ onImportAddress, onDemoChog }) {
           />
           <p className="field-hint">
             Reads from Chog Genesis on Monad Mainnet — contract{" "}
-            <code>0xc96d...3763</code>. No wallet connection required.
+            <code>0xc96d...3763</code>. No wallet connection or signature required.
           </p>
         </div>
 
@@ -96,6 +96,25 @@ export default function Import({ onImportAddress, onDemoChog }) {
           {loading ? "READING CHOG..." : "IMPORT CHOG →"}
         </button>
 
+        <p className="eyebrow" style={{ marginTop: "22px" }}>
+          NO CHOG? TRY A PUBLIC HOLDER
+        </p>
+        <div className="mh-filters">
+          {EXAMPLE_HOLDERS.map((holder) => (
+            <button
+              key={holder}
+              className="mh-chip"
+              disabled={loading}
+              onClick={() => {
+                setAddress(holder);
+                setError("");
+              }}
+            >
+              {shortAddress(holder)}
+            </button>
+          ))}
+        </div>
+
         <p className="import-note">
           💡 Find any Chog holder on{" "}
           <a
@@ -114,34 +133,7 @@ export default function Import({ onImportAddress, onDemoChog }) {
             MonadScan
           </a>
           , click on a Chog, copy the owner address.
-        </p>
-      </section>
-
-      {/* Divider */}
-      <div className="import-divider">
-        <span>OR</span>
-      </div>
-
-      {/* Demo pool */}
-      <section className="import-demo-card">
-        <div>
-          <p className="eyebrow">FAST TRACK</p>
-          <h3>Try a Demo Chog.</h3>
-          <p>
-            Instantly bind a pre-built Chog with unique traits. No wallet required.
-            Perfect for exploring the app before you own a real Chog.
-          </p>
-        </div>
-        <button
-          className="secondary-button import-demo-button"
-          onClick={handleTryDemo}
-          disabled={loadingDemo}
-        >
-          {loadingDemo ? "LOADING..." : "🎲 TRY A DEMO CHOG"}
-        </button>
-        <p className="import-demo-note">
-          ⚠️ Demo Chogs are marked as <b>Unranked</b> on the Leaderboard and earn
-          <b> 50% XP</b>. Import a real Chog to unlock full progression.
+          {hasSoul ? " Importing a Chog you played before restores its progress." : ""}
         </p>
       </section>
     </div>

@@ -7,6 +7,13 @@ import html2canvas from "html2canvas";
  * this ready-made PNG instead.
  */
 export function imageToPngDataUrl(imageUrl, size = 400) {
+  // A fresh URL forces a new request that carries CORS headers. Without it the
+  // browser can reuse the copy it cached for a plain <img> (no CORS headers),
+  // and the canvas then refuses to use the picture.
+  const freshUrl = imageUrl.startsWith("http")
+    ? imageUrl + (imageUrl.includes("?") ? "&" : "?") + "cors=1"
+    : imageUrl;
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -24,7 +31,7 @@ export function imageToPngDataUrl(imageUrl, size = 400) {
       }
     };
     img.onerror = (err) => reject(err);
-    img.src = imageUrl;
+    img.src = freshUrl;
   });
 }
 

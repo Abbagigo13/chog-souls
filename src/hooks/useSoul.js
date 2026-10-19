@@ -1,47 +1,62 @@
 // src/hooks/useSoul.js
-import { useState, useEffect } from 'react';
-import { getDemoSoul } from '../lib/api';
+import { useState, useEffect } from "react";
 
-const STORAGE_KEY = 'chog_soul_data';
+// The Soul in play. src/lib/api.js reads this same key to send it to the server.
+const STORAGE_KEY = "chog_soul_data";
+// Every Soul that was played, by id, so progress survives switching Chogs.
+const ARCHIVE_KEY = "chog_soul_archive";
+
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// A Soul saved earlier (so importing the same Chog again keeps its progress)
+export function getSavedSoul(id) {
+  const archive = readJson(ARCHIVE_KEY, {});
+  return archive[id] || null;
+}
+
+function saveSoul(soul) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(soul));
+    const archive = readJson(ARCHIVE_KEY, {});
+    archive[soul.id] = soul;
+    localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+  } catch (err) {
+    console.warn("Could not save the Soul:", err);
+  }
+}
 
 export function useSoul() {
   const [soul, setSoul] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Load Soul on startup (from localStorage OR backend)
+  // Load the Soul in play. There is no demo Soul: no Chog, no Soul.
   useEffect(() => {
-    async function loadSoul() {
-      const savedSoul = localStorage.getItem(STORAGE_KEY);
-      
-      if (savedSoul) {
-        setSoul(JSON.parse(savedSoul));
-        setLoading(false);
-      } else {
-        try {
-          const demo = await getDemoSoul();
-          setSoul(demo);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(demo));
-        } catch (err) {
-          console.error("Failed to load demo soul", err);
-        } finally {
-          setLoading(false);
-        }
+    const saved = readJson(STORAGE_KEY, null);
+    if (saved && saved.id && !saved.is_demo && saved.id !== "demo") {
+      setSoul(saved);
+    } else if (saved) {
+      // A leftover demo Soul from before demo mode was removed
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
       }
     }
-    loadSoul();
+    setLoading(false);
   }, []);
 
-  // 2. Update Soul (called after Chat, Quest, or Battle)
+  // Called after a Chat, Quest or Battle, and when a Chog is imported
   const updateSoul = (newSoulData) => {
     setSoul(newSoulData);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newSoulData));
+    saveSoul(newSoulData);
   };
 
-  // 3. Reset Soul (useful for testing)
-  const resetSoul = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    window.location.reload();
-  };
-
-  return { soul, updateSoul, resetSoul, loading };
+  return { soul, updateSoul, loading };
 }

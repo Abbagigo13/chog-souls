@@ -15,6 +15,9 @@ STREAK_REWARDS = {
 }
 DEFAULT_STREAK_XP = 100
 
+# Tiers that unlock "Mythic Blood" (the NFT's own Tier trait decides)
+RARE_CHOG_TIERS = ("Legendary", "Mythic")
+
 
 # --- Achievements with progress tracking ---
 ACHIEVEMENTS = {
@@ -76,11 +79,11 @@ ACHIEVEMENTS = {
     },
     "mythic": {
         "title": "Mythic Blood",
-        "desc": "Reached Mythic rarity.",
+        "desc": "Bound a Legendary or Mythic Chog.",
         "icon": "💎",
         "importance": 100,
-        "progress_key": "rarity_score",
-        "progress_goal": 95,
+        "progress_key": "rare_chog",
+        "progress_goal": 1,
     },
 }
 
@@ -165,7 +168,7 @@ class RetentionEngine:
 
         from .rarity_engine import RarityEngine
         rarity = RarityEngine.compute(soul)
-        if rarity["tier"] in ("Mythic", "Legendary"):
+        if rarity["tier"] in RARE_CHOG_TIERS:
             unlock("mythic")
 
         return newly_unlocked
@@ -200,8 +203,8 @@ class RetentionEngine:
                 progress_current = soul.quests_completed
             elif progress_key == "memories_count":
                 progress_current = len(soul.memories)
-            elif progress_key == "rarity_score":
-                progress_current = rarity["score"]
+            elif progress_key == "rare_chog":
+                progress_current = 1 if rarity["tier"] in RARE_CHOG_TIERS else 0
 
             progress_current = min(progress_current, progress_goal)
 

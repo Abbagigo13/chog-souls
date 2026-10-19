@@ -55,6 +55,6 @@ class Soul(BaseModel):
     last_win_date: str = ""
 
     # --- Real Chog binding ---
-    is_demo: bool = True
+    is_demo: bool = False
     token_id: int = 0
     image_url: str = ""
