@@ -1,13 +1,15 @@
 // src/components/ShareCard.jsx
 import { forwardRef } from "react";
 import { computeRarity } from "../lib/rarity";
+import { resolveImage } from "../lib/chogImage";
 
 const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 630;
 
 const ShareCard = forwardRef(function ShareCard({ soul, imageOverride }, ref) {
   const rarity = computeRarity(soul);
-  const imageSrc = imageOverride || soul.imageUrl || "/chogs/demo.svg";
+  // Always a real Chog picture (or nothing: never a stand-in face)
+  const imageSrc = imageOverride || resolveImage(soul.imageUrl) || "";
 
   return (
     <div
@@ -69,12 +71,25 @@ const ShareCard = forwardRef(function ShareCard({ soul, imageOverride }, ref) {
       {/* Main */}
       <div style={{ display: "flex", gap: 50, alignItems: "center" }}>
         {/* Chog image */}
-        <div style={{ width: 320, height: 320, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <img
-            src={imageSrc}
-            alt="Chog"
-            style={{ width: "100%", height: "100%", display: "block" }}
-          />
+        <div
+          style={{
+            width: 320,
+            height: 320,
+            flexShrink: 0,
+            borderRadius: 32,
+            overflow: "hidden",
+            border: "3px solid rgba(255,217,102,0.55)",
+            background: "#14101f",
+            boxShadow: "0 24px 60px rgba(131,110,249,0.35)",
+          }}
+        >
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt="Chog"
+              style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }}
+            />
+          ) : null}
         </div>
 
         {/* Info */}
@@ -149,7 +164,7 @@ const ShareCard = forwardRef(function ShareCard({ soul, imageOverride }, ref) {
         }}
       >
         <span>LEVEL {soul.level} · {soul.xp}/{soul.xp_to_next_level} XP</span>
-        <span>chogsouls.xyz</span>
+        <span>CHOG SOULS · CHOGATHON</span>
       </div>
     </div>
   );

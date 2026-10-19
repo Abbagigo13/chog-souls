@@ -5,37 +5,40 @@ import ProgressBar from "../components/ProgressBar";
 import StatBar from "../components/StatBar";
 import ShareCard from "../components/ShareCard";
 import { computeRarity } from "../lib/rarity";
-import { renderToPng, downloadPng, shareToX, svgToPngDataUrl } from "../lib/shareImage";
+import { resolveImage } from "../lib/chogImage";
+import { renderToPng, downloadPng, shareToX, imageToPngDataUrl } from "../lib/shareImage";
 import { playSound } from "../lib/sound";
 
 export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
-    const isDemo = soul.is_demo === true || soul.id === "demo";
+  const isDemo = soul.is_demo === true || soul.id === "demo";
   const rarity = computeRarity(soul);
 
   const cardRef = useRef(null);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareImage, setShareImage] = useState(null);
   const [generating, setGenerating] = useState(false);
-    const [imageOverride, setImageOverride] = useState(null);
+  const [imageOverride, setImageOverride] = useState(null);
 
-     const handleShare = async () => {
+  const handleShare = async () => {
     if (!cardRef.current) return;
     setGenerating(true);
     try {
-      // Step 1: Convert the SVG to a PNG so html2canvas can render it
+      // Step 1: turn the Chog picture into a PNG so html2canvas can render it
       let pngOverride = null;
-      try {
-        const svgPath = soul.imageUrl || "/chogs/demo.svg";
-        pngOverride = await svgToPngDataUrl(svgPath, 400);
-      } catch (svgErr) {
-        console.warn("SVG rasterization failed, continuing without image:", svgErr);
+      const imagePath = resolveImage(soul.imageUrl);
+      if (imagePath) {
+        try {
+          pngOverride = await imageToPngDataUrl(imagePath, 400);
+        } catch (imageErr) {
+          console.warn("Could not prepare the Chog picture, continuing without it:", imageErr);
+        }
       }
 
-      // Step 2: Set the PNG override and wait for React to re-render
+      // Step 2: set the PNG and wait for React to re-render
       setImageOverride(pngOverride);
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Step 3: Capture the card
+      // Step 3: capture the card
       const dataUrl = await renderToPng(cardRef.current);
       setShareImage(dataUrl);
       setShareModalOpen(true);
@@ -59,7 +62,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
 
   return (
     <div className="page">
-            {isDemo && (
+      {isDemo && (
         <section className="demo-banner" onClick={() => navigate("import")}>
           <span className="demo-banner-icon">⚠️</span>
           <div>
@@ -113,7 +116,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
         <ProgressBar value={soul.xp} max={soul.xp_to_next_level} />
       </section>
 
-            <div className="section-heading">
+      <div className="section-heading">
         <div>
           <p className="eyebrow">CURRENT STATE</p>
           <h2>{soul.mood}</h2>
@@ -171,8 +174,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
         </section>
       )}
 
-
-            <section>
+      <section>
         <div className="section-heading">
           <div>
             <p className="eyebrow">ACHIEVEMENTS</p>
@@ -238,7 +240,7 @@ export default function Dashboard({ soul, navigate, wallet, onImportAddress }) {
           pointerEvents: "none",
         }}
       >
-                <ShareCard ref={cardRef} soul={soul} imageOverride={imageOverride} />
+        <ShareCard ref={cardRef} soul={soul} imageOverride={imageOverride} />
       </div>
 
       {/* Share Modal */}

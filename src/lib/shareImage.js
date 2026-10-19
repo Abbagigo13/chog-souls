@@ -2,10 +2,11 @@
 import html2canvas from "html2canvas";
 
 /**
- * Convert an SVG URL to a PNG data URL by drawing it onto a canvas.
- * Works around html2canvas's SVG rendering limitations.
+ * Draw an image (a Chog picture) onto a canvas and return it as a PNG data URL.
+ * html2canvas can be unreliable with remote images, so the share card is given
+ * this ready-made PNG instead.
  */
-export function svgToPngDataUrl(svgUrl, size = 400) {
+export function imageToPngDataUrl(imageUrl, size = 400) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -23,9 +24,12 @@ export function svgToPngDataUrl(svgUrl, size = 400) {
       }
     };
     img.onerror = (err) => reject(err);
-    img.src = svgUrl;
+    img.src = imageUrl;
   });
 }
+
+// Old name, kept so nothing that still imports it breaks
+export const svgToPngDataUrl = imageToPngDataUrl;
 
 /**
  * Render a DOM element to a PNG data URL.
