@@ -28,4 +28,5 @@ yarn-debug.log*
 yarn-error.log*
 
 # OS
-Thumbs.db
+Thumbs.dbbackend/.env
+backend/.venv/

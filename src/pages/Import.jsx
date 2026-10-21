@@ -1,7 +1,7 @@
 // src/pages/Import.jsx
 import { useState } from "react";
 import Avatar from "../components/Avatar";
-import { isValidAddress } from "../lib/chogContract";
+import { isValidAddress, getChogStats } from "../lib/chogContract";
 
 // Public Chog holders (from MonadScan), so anyone can try the game
 const EXAMPLE_HOLDERS = [
@@ -22,18 +22,29 @@ export default function Import({ onImportAddress, onBack, hasSoul }) {
     setError("");
     setStatus("");
 
-    if (!isValidAddress(address.trim())) {
+    const wallet = address.trim();
+    if (!isValidAddress(wallet)) {
       setError("Invalid address. Must be 0x followed by 40 hex characters.");
       return;
     }
 
     setLoading(true);
-    setStatus("Querying Monad Mainnet... the first lookup can take a few seconds.");
+    setStatus("Querying Monad Mainnet... this can take up to a minute when the network is busy.");
 
     try {
-      const result = await onImportAddress(address.trim());
+      // Look the wallet up first, so a busy network shows its real message
+      const found = await getChogStats(wallet);
+      if (!found) {
+        setError("No Chog found in that wallet. Try another address.");
+        setLoading(false);
+        setStatus("");
+        return;
+      }
+
+      // The server now has the answer saved, so this second call is instant
+      const result = await onImportAddress(wallet);
       if (!result) {
-        setError("No Chog found at that address, or it could not be read. Try another wallet.");
+        setError("The Chog was found but could not be loaded. Please try again.");
         setLoading(false);
         setStatus("");
       }

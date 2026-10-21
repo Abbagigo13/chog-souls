@@ -1,0 +1,79 @@
+{
+  "_note": "Pre-resolved example wallets: real reads of the Chog Genesis contract and its metadata, taken on 2026-10-17. These entries never expire, so the example wallets import instantly even when public RPCs are rate-limited. Ownership is a snapshot. Every other wallet is looked up live.",
+  "0x84113421a8a564b594ee9ae78c875310332d7023": {
+    "ts": 4102444800,
+    "stats": {
+      "tokenId": 7,
+      "totalOwned": 59,
+      "metadata": {
+        "name": "CHOG #1468",
+        "description": "CHOG — a 1969-piece collection on Monad.",
+        "image": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/1468.webp",
+        "attributes": [
+          { "trait_type": "Background", "value": "Rosie" },
+          { "trait_type": "Base", "value": "Origin" },
+          { "trait_type": "Skin", "value": "Pink" },
+          { "trait_type": "Side", "value": "Right" },
+          { "trait_type": "Body", "value": "Red Tuxedo" },
+          { "trait_type": "Mouth", "value": "Rainbow Puke" },
+          { "trait_type": "Eyes", "value": "Teary" },
+          { "trait_type": "Head", "value": "Wizard Hat" },
+          { "trait_type": "Form", "value": "Chog" },
+          { "trait_type": "Tier", "value": "Common" },
+          { "trait_type": "Naked", "value": "No" }
+        ]
+      }
+    }
+  },
+  "0x8d5ccd5275141de22650d9570f4f56db87807425": {
+    "ts": 4102444800,
+    "stats": {
+      "tokenId": 355,
+      "totalOwned": 1,
+      "metadata": {
+        "name": "CHOG #1816",
+        "description": "CHOG — a 1969-piece collection on Monad.",
+        "image": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/1816.webp",
+        "attributes": [
+          { "trait_type": "Background", "value": "Aqua" },
+          { "trait_type": "Aura", "value": "Clean" },
+          { "trait_type": "Base", "value": "Origin" },
+          { "trait_type": "Skin", "value": "Origin" },
+          { "trait_type": "Side", "value": "Right" },
+          { "trait_type": "Body", "value": "Pink Tuxedo" },
+          { "trait_type": "Mouth", "value": "Worried" },
+          { "trait_type": "Eyes", "value": "Happy" },
+          { "trait_type": "Head", "value": "Balls Cap" },
+          { "trait_type": "Form", "value": "Chog" },
+          { "trait_type": "Tier", "value": "Common" },
+          { "trait_type": "Naked", "value": "No" }
+        ]
+      }
+    }
+  },
+  "0xe0abd864b96a6c72d80717a750245a9f60289c93": {
+    "ts": 4102444800,
+    "stats": {
+      "tokenId": 47,
+      "totalOwned": 73,
+      "metadata": {
+        "name": "CHOG #1508",
+        "description": "CHOG — a 1969-piece collection on Monad.",
+        "image": "ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/1508.webp",
+        "attributes": [
+          { "trait_type": "Background", "value": "Mint" },
+          { "trait_type": "Base", "value": "Origin" },
+          { "trait_type": "Skin", "value": "Pink" },
+          { "trait_type": "Side", "value": "Right" },
+          { "trait_type": "Body", "value": "Farmer Shirt" },
+          { "trait_type": "Mouth", "value": "Lip Bite" },
+          { "trait_type": "Eyes", "value": "Green laser" },
+          { "trait_type": "Head", "value": "MMGA Cap" },
+          { "trait_type": "Form", "value": "Chog" },
+          { "trait_type": "Tier", "value": "Common" },
+          { "trait_type": "Naked", "value": "No" }
+        ]
+      }
+    }
+  }
+}

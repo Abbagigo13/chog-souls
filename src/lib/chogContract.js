@@ -34,34 +34,38 @@ function toProxyImage(image) {
 }
 
 /**
- * Fetch Chog stats by wallet address.
- * The backend does all the on-chain reading and IPFS fetching.
- * Returns { tokenId, totalOwned, metadata } or null.
+ * Fetch the Chog a wallet holds.
+ * Returns { tokenId, totalOwned, metadata }, or null if the wallet holds no Chog.
+ * Throws an Error with a readable message if the network is busy or the server is down.
  */
 export async function getChogStats(ownerAddress) {
+  let response;
   try {
-    const response = await fetch(`${API_URL}/chog/import`, {
+    response = await fetch(`${API_URL}/chog/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ address: ownerAddress }),
     });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.error("Chog import failed:", err);
-      return null;
-    }
-
-    const data = await response.json();
-    if (data && data.metadata && data.metadata.image) {
-      data.metadata = {
-        ...data.metadata,
-        image: toProxyImage(data.metadata.image),
-      };
-    }
-    return data;
   } catch (err) {
     console.error("Chog import network error:", err);
-    return null;
+    throw new Error("Could not reach the CHOG SOULS server. Is the backend running?");
   }
+
+  // 404 = the wallet really holds no Chog
+  if (response.status === 404) return null;
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    console.error("Chog import failed:", err);
+    throw new Error(err.detail || "The lookup failed. Please try again in a minute.");
+  }
+
+  const data = await response.json();
+  if (data && data.metadata && data.metadata.image) {
+    data.metadata = {
+      ...data.metadata,
+      image: toProxyImage(data.metadata.image),
+    };
+  }
+  return data;
 }
