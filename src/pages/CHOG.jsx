@@ -12,7 +12,8 @@ import {
 } from "../lib/perks";
 
 const SOURCE_LABEL = {
-  linked: "Linked address (read-only)",
+  verified: "Verified owner wallet",
+  linked: "Linked address (read-only preview)",
   connected: "Connected wallet",
   none: "",
 };
@@ -31,6 +32,8 @@ export default function CHOG({ soul, wallet }) {
   const [linkError, setLinkError] = useState("");
   const [reload, setReload] = useState(0);
 
+  const verified = Boolean(soul.verified && soul.owner_address);
+
   // The tier list (no wallet needed)
   useEffect(() => {
     let cancelled = false;
@@ -44,12 +47,14 @@ export default function CHOG({ soul, wallet }) {
     };
   }, []);
 
-  // Balance of the perk wallet
+  // Balance of the wallet that gives perks: the verified owner wallet if there is one
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setError("");
-      const resolved = await resolvePerkWallet(wallet);
+      const resolved = verified
+        ? { address: soul.owner_address, source: "verified" }
+        : await resolvePerkWallet(wallet);
       if (cancelled) return;
       setTarget(resolved);
 
@@ -81,7 +86,7 @@ export default function CHOG({ soul, wallet }) {
     return () => {
       cancelled = true;
     };
-  }, [wallet, reload]);
+  }, [wallet, reload, verified, soul.owner_address]);
 
   const handleLink = () => {
     const value = input.trim();
@@ -114,17 +119,27 @@ export default function CHOG({ soul, wallet }) {
         <Avatar size="medium" imageUrl={soul.imageUrl} />
       </div>
 
+      {/* Do the perks apply to this Soul? */}
+      <section className="tk-tier-card">
+        <p className="eyebrow">{verified ? "VERIFIED OWNER" : "VISITOR"}</p>
+        <p className="tk-note">
+          {verified
+            ? "Your ownership is verified, so the perks below apply in the Arena."
+            : "You are a visitor, so this page is a preview. $CHOG perks apply in the Arena only for a verified owner: open your Soul page and press Verify ownership."}
+        </p>
+      </section>
+
       {/* Balance card */}
       <section className="chog-balance-card">
         <div className="chog-balance-left">
-          <p className="eyebrow">YOUR $CHOG</p>
+          <p className="eyebrow">{verified ? "YOUR $CHOG" : "$CHOG PREVIEW"}</p>
           <h2>
             {target.address ? (loading ? "…" : info ? formatTokens(info.balance) : "—") : "—"}
           </h2>
           <p className="chog-balance-sub">
             {target.address
               ? `${SOURCE_LABEL[target.source]} · ${shortAddress(target.address)}`
-              : "Link a wallet below to see your balance"}
+              : "Link a wallet below to preview a balance"}
           </p>
         </div>
 
@@ -161,33 +176,36 @@ export default function CHOG({ soul, wallet }) {
         </section>
       )}
 
-      {/* Link a wallet */}
-      <section className="tk-tier-card">
-        <p className="eyebrow">$CHOG WALLET</p>
-        <p className="tk-note">
-          Link any wallet to check its $CHOG. This is read-only: nothing is signed or
-          spent, and a pasted address is not proof of ownership.
-        </p>
-        <div className="tk-link">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="0x..."
-            spellCheck={false}
-          />
-          <button className="primary-button" onClick={handleLink}>
-            LINK WALLET
-          </button>
-          {target.source === "linked" && (
-            <button className="secondary-button" onClick={handleUnlink}>
-              UNLINK
+      {/* Preview a wallet (visitors only) */}
+      {!verified && (
+        <section className="tk-tier-card">
+          <p className="eyebrow">PREVIEW A WALLET</p>
+          <p className="tk-note">
+            Check what any wallet would unlock. This is read-only and does not give
+            perks by itself.
+          </p>
+          <div className="tk-link">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="0x..."
+              spellCheck={false}
+            />
+            <button className="primary-button" onClick={handleLink}>
+              PREVIEW
             </button>
-          )}
-        </div>
-        {linkError && <div className="tk-error">{linkError}</div>}
-        {error && <div className="tk-error">{error}</div>}
-      </section>
+            {target.source === "linked" && (
+              <button className="secondary-button" onClick={handleUnlink}>
+                CLEAR
+              </button>
+            )}
+          </div>
+          {linkError && <div className="tk-error">{linkError}</div>}
+        </section>
+      )}
+
+      {error && <div className="tk-error">{error}</div>}
 
       {/* Perks */}
       <div className="section-heading">
@@ -202,7 +220,7 @@ export default function CHOG({ soul, wallet }) {
           tiers.tiers
             .filter((t) => t.tier > 0)
             .map((t) => {
-              const active = tier && tier.tier >= t.tier;
+              const active = verified && tier && tier.tier >= t.tier;
               return (
                 <div key={t.tier} className={`chog-roadmap-item ${active ? "active" : ""}`}>
                   <span className="chog-roadmap-dot" />
@@ -233,8 +251,7 @@ export default function CHOG({ soul, wallet }) {
       <div className="chog-footer-note">
         <p>
           $CHOG is optional. Everything in CHOG SOULS works without it, and your Chog's
-          real traits decide how you fight. Perks apply automatically in the Arena once
-          your balance is read.{" "}
+          real traits decide how you fight.{" "}
           <a
             href={`https://monadscan.com/token/${contract}`}
             target="_blank"

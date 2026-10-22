@@ -16,6 +16,7 @@ import TopBar from "./components/TopBar";
 import BottomNav from "./components/BottomNav";
 import { useSoul, getSavedSoul } from "./hooks/useSoul";
 import { connectWallet } from "./lib/wallet";
+import { verifyOwnership } from "./lib/verify";
 import { getChogStats } from "./lib/chogContract";
 import { decodeChogTraits } from "./lib/traitDecoder";
 import { apiChat, apiChoice, apiDailyCheck } from "./lib/api";
@@ -175,6 +176,10 @@ export default function App() {
           tokenId: result.tokenId,
           token_id: result.tokenId,
           is_demo: false,
+          // A visitor until the wallet proves it owns this Chog
+          verified: false,
+          owner_address: "",
+          owner_proof: "",
           memories: [
             {
               id: `awaken-${Date.now()}`,
@@ -198,13 +203,40 @@ export default function App() {
     }
   }
 
-  // Connect a wallet = load the Chog that wallet holds
+  // Prove the connected wallet owns this Soul's Chog (a free signature)
+  async function runVerification(targetSoul, knownAddress) {
+    try {
+      const address = knownAddress || (await connectWallet());
+      setWallet(address);
+      setToast("Check your wallet to sign. It's free and sends no transaction.");
+      const result = await verifyOwnership(address, targetSoul.tokenId);
+      updateSoul({
+        ...targetSoul,
+        verified: true,
+        owner_address: result.address,
+        owner_proof: result.proof,
+      });
+      setToast("✓ Ownership verified. You are the owner.");
+      return true;
+    } catch (error) {
+      setToast(error.message || "Verification failed.");
+      return false;
+    }
+  }
+
+  const handleVerify = () => runVerification(soul);
+
+  // Connect a wallet = load the Chog that wallet holds, then prove ownership
   async function handleConnect() {
     try {
       const address = await connectWallet();
       setWallet(address);
       const found = await handleImportAddress(address);
-      if (!found && !soul) setPage("import");
+      if (!found) {
+        if (!soul) setPage("import");
+        return;
+      }
+      await runVerification(found, address);
     } catch (error) {
       setToast(error.message || "Wallet connection failed");
     }
@@ -370,7 +402,7 @@ export default function App() {
           hasSoul
         />
       );
-    return <Dashboard {...shared} />;
+    return <Dashboard {...shared} onVerify={handleVerify} />;
   };
 
   return (

@@ -3,6 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import router
+from .api.verify_routes import router as verify_router
 
 app = FastAPI(title="CHOG SOULS API")
 
@@ -30,3 +31,4 @@ async def root():
 
 
 app.include_router(router, prefix="/api")
+app.include_router(verify_router, prefix="/api")

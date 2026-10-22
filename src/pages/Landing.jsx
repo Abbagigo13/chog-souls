@@ -58,7 +58,7 @@ export default function Landing({ soul, onImport, onConnect, onContinue }) {
         </div>
 
         <p className="zero-cost">
-          <span /> READ-ONLY · NOTHING IS SIGNED OR SPENT
+          <span /> NOTHING IS SPENT · SIGNING IS FREE AND OPTIONAL
         </p>
 
         <footer className="landing-footer">

@@ -9,7 +9,7 @@ import { resolveImage } from "../lib/chogImage";
 import { renderToPng, downloadPng, shareToX, imageToPngDataUrl } from "../lib/shareImage";
 import { playSound } from "../lib/sound";
 
-export default function Dashboard({ soul, navigate }) {
+export default function Dashboard({ soul, navigate, onVerify }) {
   const rarity = computeRarity(soul);
 
   const cardRef = useRef(null);
@@ -70,7 +70,16 @@ export default function Dashboard({ soul, navigate }) {
           <h1>{soul.name}</h1>
           <div className="archetype-row">
             <p className="archetype">{soul.archetype}</p>
-            <span className="verified-badge">✓ ON-CHAIN</span>
+            {soul.verified ? (
+              <span className="verified-badge">✓ OWNER</span>
+            ) : (
+              <span
+                className="rarity-badge"
+                style={{ color: "#9c94aa", borderColor: "#9c94aa" }}
+              >
+                VISITOR
+              </span>
+            )}
             <span
               className="rarity-badge"
               style={{ color: rarity.color, borderColor: rarity.color }}
@@ -86,7 +95,7 @@ export default function Dashboard({ soul, navigate }) {
             ))}
           </div>
         </div>
-        <div className="verified-avatar">
+        <div className={soul.verified ? "verified-avatar" : ""}>
           <Avatar size="large" level={soul.level} imageUrl={soul.imageUrl} />
         </div>
       </section>
@@ -126,6 +135,23 @@ export default function Dashboard({ soul, navigate }) {
         <button onClick={() => navigate("arena")}><b>ARENA</b><span>Test your Soul</span></button>
         <button onClick={() => navigate("timeline")}><b>HISTORY</b><span>See what changed</span></button>
       </section>
+
+      {!soul.verified && (
+        <section className="import-prompt">
+          <div>
+            <p className="eyebrow">VISITOR MODE</p>
+            <h3>Own this Chog? Prove it.</h3>
+            <p>
+              Sign a free message with the wallet that holds {soul.name}. No gas, no
+              transaction. Owners get the OWNER badge, a leaderboard rank and $CHOG
+              perks. Visitors can play, but stay unranked.
+            </p>
+          </div>
+          <button className="primary-button" onClick={onVerify}>
+            VERIFY OWNERSHIP →
+          </button>
+        </section>
+      )}
 
       <section className="share-section">
         <div>

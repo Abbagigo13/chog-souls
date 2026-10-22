@@ -58,3 +58,8 @@ class Soul(BaseModel):
     is_demo: bool = False
     token_id: int = 0
     image_url: str = ""
+
+    # --- Ownership proof (set by the server, never trusted from the browser) ---
+    verified: bool = False
+    owner_address: str = ""
+    owner_proof: str = ""

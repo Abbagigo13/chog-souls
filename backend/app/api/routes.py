@@ -20,6 +20,7 @@ from ..services.chog_token_reader import ChogTokenReader, XP_BONUS_PER_TIER_PCT
 from ..services.image_proxy import fetch_ipfs_image
 from ..services.memory_engine import MemoryEngine
 from ..services.retention_engine import RetentionEngine, ACHIEVEMENTS
+from ..services.verification import validate_proof
 from ..data.quests import WEEKLY_QUESTS
 from ..data.demo_chogs import DEMO_CHOGS
 from ..data.rivals import RIVALS
@@ -136,8 +137,19 @@ def resolve_soul(provided: Optional[Soul]) -> Soul:
     """
     The browser sends the Soul it is playing with. If an old client sends
     nothing, fall back to a fresh demo Soul instead of shared server state.
+
+    Ownership is never taken on trust: a Soul counts as verified only if its
+    proof was issued by this server, has not expired, and is for this Chog.
     """
-    return provided if provided is not None else make_demo_soul()
+    soul = provided if provided is not None else make_demo_soul()
+
+    owner = validate_proof(soul.owner_proof, soul.token_id) if soul.owner_proof else None
+    soul.verified = owner is not None
+    soul.owner_address = owner or ""
+    if owner is None:
+        soul.owner_proof = ""
+
+    return soul
 
 
 # --- Request Schemas ---
@@ -155,7 +167,7 @@ class ChoiceRequest(BaseModel):
 class FightStartRequest(BaseModel):
     soul: Optional[Soul] = None
     rival_id: str
-    holder_tier: int = 0
+    holder_tier: int = 0   # ignored: the server works the tier out from the verified wallet
 
 class FightRoundRequest(BaseModel):
     soul: Optional[Soul] = None
@@ -622,8 +634,17 @@ async def settle_fight(soul: Soul, rival: dict, battle: dict) -> dict:
 async def fight_start(request: FightStartRequest):
     soul = resolve_soul(request.soul)
     rival = _find_rival(request.rival_id)
+
+    # $CHOG perks only count for a verified owner, and the balance is read here
+    # on the server, so the browser cannot claim a tier it does not have.
+    holder_tier = 0
+    if soul.verified and soul.owner_address:
+        holder = await ChogTokenReader.get_balance(soul.owner_address)
+        if holder.get("ok"):
+            holder_tier = holder["tier"]["tier"]
+
     battle = battle_engine.start_battle(
-        _soul_for_battle(soul), rival, request.holder_tier
+        _soul_for_battle(soul), rival, holder_tier
     )
     return {"battle": battle}
 

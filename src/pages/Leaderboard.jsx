@@ -4,7 +4,7 @@ import { computeRarity, computePowerScore } from "../lib/rarity";
 import { RIVAL_SOULS } from "../data/demoSouls";
 
 export default function Leaderboard({ soul, navigate, onViewProfile }) {
-  // Combine rivals + user's soul
+  // Combine the sample Souls with the player's Soul
   const allSouls = [...RIVAL_SOULS, soul].map((s) => ({
     ...s,
     _rarity: computeRarity(s),
@@ -15,9 +15,9 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
   // Sort by power score descending
   const ranked = allSouls.sort((a, b) => b._power - a._power);
 
-  // Find user's rank
+  // Only a verified owner gets a rank; a visitor is listed but unranked
+  const isVisitor = !soul.verified;
   const myRank = ranked.findIndex((s) => s._isMine) + 1;
-  const isDemoSoul = soul.is_demo === true || soul.id === "demo";
 
   return (
     <div className="page">
@@ -32,10 +32,10 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
       <section className="your-rank-card">
         <div className="rank-info">
           <p className="eyebrow">YOUR RANK</p>
-          {isDemoSoul ? (
+          {isVisitor ? (
             <>
               <h2 className="unranked">UNRANKED</h2>
-              <p className="rank-of">Import a real Chog to rank</p>
+              <p className="rank-of">Verify you own this Chog to rank</p>
             </>
           ) : (
             <>
@@ -75,13 +75,16 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
               }
             }}
           >
-            <div className={`rank-number rank-${index + 1} ${entry._isMine && isDemoSoul ? "unranked" : ""}`}>
-              {entry._isMine && isDemoSoul ? "—" : index + 1}
+            <div className={`rank-number rank-${index + 1} ${entry._isMine && isVisitor ? "unranked" : ""}`}>
+              {entry._isMine && isVisitor ? "—" : index + 1}
             </div>
             <Avatar size="tiny" imageUrl={entry.imageUrl} />
             <div className="leaderboard-info">
               <b>{entry.name}</b>
-              <span>{entry.archetype}</span>
+              <span>
+                {entry.archetype}
+                {entry._isMine ? (isVisitor ? " · Visitor" : " · Owner") : ""}
+              </span>
             </div>
             <div className="leaderboard-stats">
               <span className="rarity-tag" style={{ color: entry._rarity.color }}>
@@ -98,8 +101,7 @@ export default function Leaderboard({ soul, navigate, onViewProfile }) {
 
         <p className="leaderboard-note">
           Sample Souls use real Chog artwork and traits; their levels and stats
-          are simulated for this demo. Real Souls will appear as the community
-          grows.
+          are simulated for this demo. Only verified owners are ranked.
         </p>
       </div>
     </div>
