@@ -1,67 +1,133 @@
-# CHOG SOULS — 3 Minute Judge Demo
+# CHOG SOULS — 3-Minute Judge Demo Script
 
-## 0:00
+A timed walkthrough designed for hackathon judging. Hit every feature without rushing.
 
-Say:
+---
 
-> Most NFTs are static. This one remembers you.
+## Before You Start
 
-Open the dashboard.
+1. `cd backend && source .venv/bin/activate && uvicorn app.main:app --reload`
+2. `npm run dev` in the project root
+3. Open `http://localhost:5173` in Chrome
+4. Optional: run `localStorage.clear()` in DevTools for a clean first-time experience
 
-## 0:20
+---
 
-Show the traits.
+## 0:00 — Landing (10s)
 
-Say:
+**Say:** "Most NFTs are static. This one remembers you."
 
-> The Chog is not a skin. Its traits become the genetic blueprint of the Soul.
+Click **AWAKEN A SOUL**.
 
-## 0:45
+---
 
-Open Talk.
+## 0:10 — Dashboard (20s)
 
-Ask:
+Point at:
 
-> Do you trust Bob?
+- The **Chog avatar** in the center
+- The **archetype** label ("The Loyal Trickster")
+- The **rarity badge** (UNCOMMON)
+- The **four stat bars** (Courage, Loyalty, Intelligence, Greed)
+- The **streak badge** (DAY 1)
 
-Show Giga's response.
+**Say:** "The Chog's actual on-chain traits become the genetic blueprint of its Soul."
 
-## 1:15
+---
 
-Open Quest and choose an option.
+## 0:30 — Talk (35s)
 
-Show the changed stats.
+Click **TALK**. Send:
 
-Say:
+> "Do you trust Bob?"
 
-> Every choice changes the character.
+While the AI responds, point out:
 
-## 1:40
+- The avatar pulses during the AI call
+- A sound effect plays on reply
+- The response is written **in character** — references loyalty and memory
 
-Open History.
+**Say:** "The Soul replies using its own personality. And it will remember this conversation."
 
-Show the new memory.
+---
 
-Say:
+## 1:05 — Quest (35s)
 
-> Important decisions become memories.
+Click **QUEST**. Point out the weekday label and the scenario text.
 
-## 2:00
+Click **RETURN IT**.
 
-Open Arena and run a battle.
+Show:
 
-Say:
+- The AI-generated narrative explaining the outcome
+- The stat changes ("Loyalty +3")
+- The new memory appearing in the timeline
 
-> The same Soul carries its stats into gameplay.
+**Say:** "Every choice changes who the Soul is. The AI evaluates it against the Soul's personality, not a fixed alignment chart."
 
-## 2:35
+---
 
-Return to History.
+## 1:40 — Timeline (15s)
 
-Say:
+Click **HISTORY**.
 
-> CHOG SOULS turns your Chog from something you own into someone you know.
+Show the two memories just created (chat + quest).
 
-## Fallback
+**Say:** "Important moments become memories. Low-importance ones fade. The Soul only holds onto what matters."
 
-If a wallet, RPC, or external service fails, use Demo Mode immediately.
+---
+
+## 1:55 — Arena (45s)
+
+Click **ARENA**.
+
+Read NOVA's opening taunt aloud.
+
+**Say:** "Rivals have their own personality. NOVA is a Ruthless Strategist — she talks differently than your Soul."
+
+Click **START BATTLE**.
+
+Show:
+
+- The power scores for both sides
+- The AI battle narrative
+- NOVA's post-battle reaction
+- The win/lose sound effect
+
+---
+
+## 2:40 — Leaderboard (20s)
+
+Click **RANKS**.
+
+Point at the 9 rival Souls.
+
+Click any rival to open their full profile.
+
+**Say:** "The world is alive. Every rival has a story. You climb the board by battling and leveling up."
+
+---
+
+## 2:50 — Share Card (10s)
+
+Return to Dashboard. Click **SHARE SOUL**.
+
+Click **DOWNLOAD PNG**.
+
+**Say:** "One click to own your Soul's moment and share it."
+
+---
+
+## 3:00 — Closing
+
+**Say:** "CHOG SOULS turns your Chog from something you own into someone you know."
+
+---
+
+## Fallback Plan
+
+**If the mainnet import fails:** Use **TRY A DEMO CHOG** on the Import page. Six pre-built Chogs load instantly with no RPC call.
+
+**If the AI is slow:** Keep talking, do not wait for the response. Move to the next section and return to show the reply.
+
+**If everything breaks:** Open DevTools, run `localStorage.clear()`, reload. Demo Mode starts automatically.
